@@ -11,10 +11,12 @@ import { bytesToHex, hexToBytes } from "../base/encoding.js";
 import { NodeClient } from "../base/node.js";
 import type { Framework, HandlerResult } from "../base/types.js";
 import {
+  decodeBidEnvelope,
   decodeClearMessage,
   decodePrivateBid,
   encodeBidReceipt,
   encodeClearResult,
+  type BidEnvelope,
   type PrivateBid,
 } from "./abi.js";
 import {
@@ -57,10 +59,17 @@ export function reportState(): unknown {
   };
 }
 
-export async function handlePrivateBid(ciphertextHex: string): Promise<HandlerResult> {
+export async function handlePrivateBid(messageHex: string): Promise<HandlerResult> {
+  let envelope: BidEnvelope;
+  try {
+    envelope = decodeBidEnvelope(messageHex as Hex);
+  } catch (error) {
+    return failure(`decoding bid envelope: ${errorMessage(error)}`);
+  }
+
   let ciphertext: Uint8Array;
   try {
-    ciphertext = hexToBytes(ciphertextHex);
+    ciphertext = hexToBytes(envelope.ciphertext);
   } catch (error) {
     return failure(`invalid ciphertext: ${errorMessage(error)}`);
   }
@@ -82,6 +91,15 @@ export async function handlePrivateBid(ciphertextHex: string): Promise<HandlerRe
 
   const validationError = validateBid(bid);
   if (validationError) return failure(validationError);
+
+  // The envelope fields were set by the auction contract, not the bidder.
+  // A plaintext claiming another bidder or auction is a spoofing attempt.
+  if (bid.bidder !== getAddress(envelope.bidder)) {
+    return failure("bid bidder does not match the on-chain sender");
+  }
+  if (bid.auctionId !== envelope.auctionId) {
+    return failure("bid auctionId does not match the escrowed auction");
+  }
 
   const auctionKey = keyForAuction(bid.contractAddr, bid.auctionId);
   const bidderKey = bid.bidder.toLowerCase();

@@ -10,6 +10,10 @@ const PRIVATE_BID_PARAMS = parseAbiParameters(
   "(address bidder, address contractAddr, uint256 auctionId, uint64 nonce, uint256 unitPriceWei, bytes32 salt)",
 );
 
+const BID_ENVELOPE_PARAMS = parseAbiParameters(
+  "uint256 auctionId, address bidder, bytes ciphertext",
+);
+
 const CLEAR_MESSAGE_PARAMS = parseAbiParameters(
   "(uint256 auctionId, address contractAddr, uint256 floorPriceWei, uint256 ceilingPriceWei)",
 );
@@ -29,6 +33,17 @@ export interface PrivateBid {
   nonce: bigint;
   unitPriceWei: bigint;
   salt: Hex;
+}
+
+/**
+ * The on-chain wrapper QuietFillAuction puts around every bid ciphertext.
+ * `auctionId` and `bidder` come from the contract (msg.sender), so the TEE
+ * can trust them even though the plaintext is bidder-supplied.
+ */
+export interface BidEnvelope {
+  auctionId: bigint;
+  bidder: Address;
+  ciphertext: Hex;
 }
 
 export interface ClearMessage {
@@ -51,6 +66,22 @@ export interface ClearResult {
 
 export function encodePrivateBid(bid: PrivateBid): Hex {
   return encodeAbiParameters(PRIVATE_BID_PARAMS, [bid]);
+}
+
+export function encodeBidEnvelope(envelope: BidEnvelope): Hex {
+  return encodeAbiParameters(BID_ENVELOPE_PARAMS, [
+    envelope.auctionId,
+    envelope.bidder,
+    envelope.ciphertext,
+  ]);
+}
+
+export function decodeBidEnvelope(data: Hex): BidEnvelope {
+  const [auctionId, bidder, ciphertext] = decodeAbiParameters(
+    BID_ENVELOPE_PARAMS,
+    data,
+  );
+  return { auctionId, bidder, ciphertext };
 }
 
 export function decodePrivateBid(data: Hex): PrivateBid {

@@ -1,6 +1,7 @@
 import { encodeAbiParameters, hexToBytes, parseAbiParameters, type Address } from "viem";
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { encodeBidEnvelope } from "../app/abi.js";
 import { VERSION } from "../app/config.js";
 import * as handlers from "../app/handlers.js";
 import { bytesToHex, stringToBytes32Hex } from "../base/encoding.js";
@@ -52,10 +53,15 @@ describe("QuietFill wire server", () => {
       unitPriceWei: 2_000_000_000_000_000_000n,
       salt: `0x${"22".repeat(32)}`,
     }]);
+    const envelope = encodeBidEnvelope({
+      auctionId: 1n,
+      bidder: BIDDER,
+      ciphertext: plaintext,
+    });
     const [status, body] = await server.handleRequest(
       "POST",
       "/action",
-      action("PRIVATE_BID", hexToBytes(plaintext)),
+      action("PRIVATE_BID", hexToBytes(envelope)),
     );
     const result = body as Record<string, unknown>;
 

@@ -4,8 +4,10 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   decodeBidReceipt,
   decodeClearResult,
+  encodeBidEnvelope,
   encodeClearMessage,
   encodePrivateBid,
+  type BidEnvelope,
   type PrivateBid,
 } from "../app/abi.js";
 import * as handlers from "../app/handlers.js";
@@ -35,8 +37,15 @@ function bid(overrides: Partial<PrivateBid> = {}): PrivateBid {
   };
 }
 
-async function submit(value: PrivateBid) {
-  return handlers.handlePrivateBid(encodePrivateBid(value));
+async function submit(value: PrivateBid, envelopeOverrides: Partial<BidEnvelope> = {}) {
+  return handlers.handlePrivateBid(
+    encodeBidEnvelope({
+      auctionId: value.auctionId,
+      bidder: value.bidder,
+      ciphertext: encodePrivateBid(value),
+      ...envelopeOverrides,
+    }),
+  );
 }
 
 function clear(overrides: Partial<Parameters<typeof encodeClearMessage>[0]> = {}) {
@@ -88,6 +97,18 @@ describe("private bid receipts", () => {
     expect((await submit(bid({ nonce: 0n })))[1]).toBe(0);
     expect((await submit(bid({ unitPriceWei: 0n })))[1]).toBe(0);
     expect((await submit(bid({ salt: zeroHash })))[1]).toBe(0);
+  });
+
+  it("rejects a plaintext that claims another bidder", async () => {
+    const result = await submit(bid({ bidder: ALICE }), { bidder: BOB });
+    expect(result[1]).toBe(0);
+    expect(result[2]).toContain("on-chain sender");
+  });
+
+  it("rejects a ciphertext bound to a different auction", async () => {
+    const result = await submit(bid({ auctionId: 1n }), { auctionId: 2n });
+    expect(result[1]).toBe(0);
+    expect(result[2]).toContain("escrowed auction");
   });
 
   it("does not expose prices through state", async () => {

@@ -263,6 +263,17 @@ contract QuietFillAuctionTest {
         require(quietFill.getAuction(auctionId).teeId == teeSigner, "TEE not pinned");
     }
 
+    function testBidInstructionBindsSenderAndAuction() public {
+        uint256 auctionId = _createAuction();
+        _submitBid(auctionId, bidder);
+
+        (uint256 boundAuctionId, address boundBidder, bytes memory ciphertext) =
+            abi.decode(extensionRegistry.lastMessage(), (uint256, address, bytes));
+        require(boundAuctionId == auctionId, "auction not bound");
+        require(boundBidder == bidder, "sender not bound");
+        require(keccak256(ciphertext) == keccak256(hex"01020304"), "ciphertext altered");
+    }
+
     function testSignedResultCannotBeReplayed() public {
         uint256 auctionId = _readyAuction();
         QuietFillAuction.ClearResult memory result = _winningResult(auctionId, bidder);

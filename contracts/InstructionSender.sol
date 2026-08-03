@@ -9,6 +9,8 @@ import {ITeeMachineRegistry} from "./interfaces/ITeeMachineRegistry.sol";
 /// @notice Escrowed fixed-lot auctions whose encrypted bids are cleared by a
 /// Flare Confidential Compute extension. A relayer may submit a clear result,
 /// but settlement only accepts the chain-bound signature of an active TEE.
+/// The contract is permissionless: anyone can create auctions, bid, request
+/// clears, relay results, and recover funds. There are no admin keys.
 contract QuietFillAuction {
     bytes32 public constant OP_TYPE_QUIETFILL = bytes32("QUIETFILL");
     bytes32 public constant OP_COMMAND_PRIVATE_BID = bytes32("PRIVATE_BID");
@@ -81,7 +83,6 @@ contract QuietFillAuction {
     error InvalidResult();
     error InvalidSignature();
     error NoRefund();
-    error NotOwner();
     error ReentrantCall();
     error SafeTransferFailed();
     error SettlementWindowClosed();
@@ -113,14 +114,12 @@ contract QuietFillAuction {
     event AuctionNoFill(uint256 indexed auctionId, uint256 submittedBidCount);
     event AuctionCancelled(uint256 indexed auctionId);
     event QuoteRefunded(uint256 indexed auctionId, address indexed bidder, uint256 amount);
-    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
     ITeeExtensionRegistry public immutable TEE_EXTENSION_REGISTRY;
     ITeeMachineRegistry public immutable TEE_MACHINE_REGISTRY;
     IERC20 public immutable BASE_TOKEN;
     IERC20 public immutable QUOTE_TOKEN;
 
-    address public owner;
     uint256 public nextAuctionId = 1;
 
     uint256 private _extensionId;
@@ -128,11 +127,6 @@ contract QuietFillAuction {
 
     mapping(uint256 auctionId => Auction auction) public auctions;
     mapping(uint256 auctionId => mapping(address bidder => uint256 amount)) public quoteEscrow;
-
-    modifier onlyOwner() {
-        if (msg.sender != owner) revert NotOwner();
-        _;
-    }
 
     modifier nonReentrant() {
         if (_entered != 1) revert ReentrantCall();
@@ -160,8 +154,6 @@ contract QuietFillAuction {
         TEE_MACHINE_REGISTRY = teeMachineRegistry;
         BASE_TOKEN = baseToken;
         QUOTE_TOKEN = quoteToken;
-        owner = msg.sender;
-        emit OwnershipTransferred(address(0), msg.sender);
     }
 
     /// @notice Finds and caches this sender's registered public extension ID.
@@ -180,13 +172,6 @@ contract QuietFillAuction {
 
     function extensionId() external view returns (uint256) {
         return _getExtensionId();
-    }
-
-    function transferOwnership(address newOwner) external onlyOwner {
-        if (newOwner == address(0)) revert InvalidAddress();
-        address previousOwner = owner;
-        owner = newOwner;
-        emit OwnershipTransferred(previousOwner, newOwner);
     }
 
     function createAuction(
@@ -240,7 +225,9 @@ contract QuietFillAuction {
     }
 
     /// @notice Escrows the public ceiling amount once and sends only ciphertext
-    /// to FCC. Replacement bids reuse the existing escrow.
+    /// to FCC. Replacement bids reuse the existing escrow. The instruction
+    /// wraps the ciphertext with the auction ID and the caller, so the TEE can
+    /// reject a plaintext that claims a different bidder or auction.
     function submitPrivateBid(uint256 auctionId, bytes calldata encryptedBid)
         external
         payable
@@ -260,7 +247,8 @@ contract QuietFillAuction {
             _safeTransferFrom(QUOTE_TOKEN, msg.sender, address(this), auction.maxQuoteAmount);
         }
 
-        instructionId = _sendInstruction(auction.teeId, OP_COMMAND_PRIVATE_BID, encryptedBid, msg.sender);
+        bytes memory bidMessage = abi.encode(auctionId, msg.sender, encryptedBid);
+        instructionId = _sendInstruction(auction.teeId, OP_COMMAND_PRIVATE_BID, bidMessage, msg.sender);
         emit PrivateBidSubmitted(auctionId, msg.sender, instructionId, escrowCreated);
     }
 

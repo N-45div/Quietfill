@@ -22,7 +22,7 @@ Use Node 24. Do not add secrets, private keys, indexer credentials, deployment s
 
 The TypeScript FCC extension implements:
 
-- `QUIETFILL / PRIVATE_BID`: decrypt an ECIES ciphertext, ABI-decode the private bid, enforce monotonic bidder nonces, and store only the latest bid per bidder.
+- `QUIETFILL / PRIVATE_BID`: decode the contract-authenticated envelope `(auctionId, bidder, ciphertext)`, decrypt the ECIES ciphertext, ABI-decode the private bid, reject any plaintext whose bidder or auction does not match the envelope, enforce monotonic bidder nonces, and store only the latest bid per bidder.
 - `QUIETFILL / CLEAR`: select the highest bid inside the immutable on-chain floor/ceiling collar, with deterministic address tie-breaking.
 - Price-free public receipts and state. Bid prices must never be exposed by `/state`, logs, or the bid receipt.
 
@@ -30,6 +30,8 @@ The Solidity contract in `contracts/InstructionSender.sol` implements:
 
 - Seller FXRP escrow and dealer USDT0 ceiling escrow.
 - One ceiling deposit per dealer, reused for encrypted replacement bids.
+- Bid instructions wrap the ciphertext as `abi.encode(auctionId, msg.sender, encryptedBid)` so the TEE can bind every bid to its escrowed sender and auction.
+- No owner and no admin functions: every entry point is permissionless.
 - One Flare-registry-selected TEE pinned per auction. Every bid and the clear request for that auction must go to that same TEE.
 - On-chain verification of the exact chain-bound `TEE_ACTION_RESULT` signature produced by the scaffold's pinned `tee-node` revision.
 - Atomic winner settlement, spread refund, pull-based loser refunds, no-fill recovery, timeout cancellation, replay rejection, and reentrancy protection.
@@ -42,6 +44,7 @@ Security invariants that must not be weakened:
 4. A winner without full public ceiling escrow cannot settle.
 5. Every terminal path lets the seller recover FXRP and every non-winning dealer recover USDT0.
 6. An auction must have a timeout path if the hosted TEE or proxy becomes unavailable.
+7. The TEE only accepts a plaintext whose bidder and auction match the contract-authenticated instruction envelope, so no bidder can overwrite or displace another bidder's stored bid.
 
 Contract tests live in `test/QuietFillAuction.t.sol`. They cover valid settlement, forged signatures, relayer tampering, replay, an unescrowed winner, no-fill, timeout recovery, late bids, replacement bids, and registry-selected TEE pinning.
 
