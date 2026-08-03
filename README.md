@@ -29,18 +29,18 @@ sequenceDiagram
   participant C as QuietFillAuction contract
   participant T as FCC TEE (QuietFill extension)
 
-  S->>C: createAuction(lot, floor, ceiling) + FXRP escrow
+  S->>C: createAuction(lot, floor, ceiling) with FXRP escrow
   Note over C: pins one registry-selected TEE to the auction
-  D->>C: submitPrivateBid(auctionId, ciphertext) + USDT0 ceiling escrow
-  C->>T: instruction: abi.encode(auctionId, msg.sender, ciphertext)
-  T->>T: decrypt; reject plaintext that claims another bidder/auction
+  D->>C: submitPrivateBid(auctionId, ciphertext) with USDT0 ceiling escrow
+  C->>T: instruction abi.encode(auctionId, sender, ciphertext)
+  T->>T: decrypt, reject plaintext claiming another bidder or auction
   Note over D,T: bid prices exist in plaintext only inside the TEE
-  D->>C: (optional) replacement bid, higher nonce, same escrow
-  S->>C: requestClear(auctionId) — permissionless after bid deadline
-  C->>T: instruction: (auctionId, contract, floor, ceiling)
+  D->>C: optional replacement bid, higher nonce, same escrow
+  S->>C: requestClear(auctionId), permissionless after bid deadline
+  C->>T: instruction (auctionId, contract, floor, ceiling)
   T->>T: highest eligible price wins, deterministic tie-break
-  T-->>C: ClearResult + chain-bound TEE signature (via proxy, any relayer)
-  C->>C: verify pinned TEE's signature, escrow, collar → atomic settlement
+  T-->>C: ClearResult plus chain-bound TEE signature, any relayer
+  C->>C: verify pinned TEE signature, escrow, collar, then settle atomically
 ```
 
 1. **Create.** The seller escrows the FXRP lot and publishes a price collar (floor/ceiling). The contract asks Flare's TEE machine registry for one active TEE running this extension and pins it to the auction.
