@@ -9,11 +9,8 @@ Run these checks before changing code:
 ```bash
 git status --short --branch
 forge test
-cd typescript
-npm ci
-npm run typecheck
-npm test
-npm run build
+cd typescript && npm ci && npm run typecheck && npm test && npm run build
+cd ../web && npm ci && npm run typecheck && npm test && npm run build
 ```
 
 Use Node 24. Do not add secrets, private keys, indexer credentials, deployment state, or private planning material to Git. `.internal/`, `.env*`, proxy credentials, and `DEPLOYMENT.md` are intentionally ignored.
@@ -46,7 +43,9 @@ Security invariants that must not be weakened:
 6. An auction must have a timeout path if the hosted TEE or proxy becomes unavailable.
 7. The TEE only accepts a plaintext whose bidder and auction match the contract-authenticated instruction envelope, so no bidder can overwrite or displace another bidder's stored bid.
 
-Contract tests live in `test/QuietFillAuction.t.sol`. They cover valid settlement, forged signatures, relayer tampering, replay, an unescrowed winner, no-fill, timeout recovery, late bids, replacement bids, and registry-selected TEE pinning.
+Contract tests live in `test/QuietFillAuction.t.sol`. They cover valid settlement, forged signatures, relayer tampering, replay, an unescrowed winner, no-fill, timeout recovery, late bids, replacement bids, registry-selected TEE pinning, and envelope binding.
+
+The Go tooling in `tools/` deploys QuietFillAuction (with verified escrow-token addresses, or auto-deployed mintable TestTokens on a local devnet) and `run-test` drives one real auction end to end against a running FCC stack. The web app in `web/` (React + viem) is the seller/dealer product: it encrypts bids in the browser with a tee-node-compatible ECIES implementation (Go cross-check fixture committed in `web/src/lib/ecies.test.ts`), verifies the proxy TEE key against the auction's pinned teeId before encrypting, and relays the signed clear result into `settleAuction`.
 
 ## Exact Flare Signature Format
 
@@ -63,46 +62,23 @@ Do not replace this with a generic `signMessage(data)` assumption or accept an u
 
 ## Resume Work in This Order
 
-### 1. Generate Go bindings on a machine with adequate disk space
+Everything below assumes the codebase state after the tooling and web-app commits: bindings generate via `./scripts/generate-bindings.sh` (forge + jq + Go, or the Docker fallback in the script header of the same name), `tools/` deploys and drives QuietFillAuction end to end, and `web/` is the seller/dealer app with tee-node-compatible in-browser ECIES (cross-checked against the pinned revision in both directions).
 
-The previous machine's Windows C: drive had only about 2.6 GB free, so Docker-based binding generation was intentionally stopped. The Solidity ABI and BIN were extracted locally, but generated artifacts are ignored and `autogen.go` was not completed.
+### 1. Deploy to Coston2
 
-Preferred: install Go 1.25.1+ directly, then run:
+- Resolve the **real** Coston2 FXRP and USDT0 addresses against official Flare sources — never invent them. Set `BASE_TOKEN` and `QUOTE_TOKEN` in `.env`; `deploy-contract` refuses to run on a live network without them and verifies code exists and `symbol()`/`decimals()` answer over RPC.
+- Follow the Coston2 flow in [docs/scaffold-readme.md](docs/scaffold-readme.md): funded key in `.env`, `LOCAL_MODE=false`, proxy config with indexer credentials, then `./scripts/pre-build.sh`, `./scripts/start-services.sh --chain coston2`, ngrok on 6674, `./scripts/post-build.sh`.
+- For the browser to reach the proxy, the tunnel must add CORS headers, e.g. `ngrok http 6674 --response-header-add "Access-Control-Allow-Origin: *"`.
 
-```bash
-./scripts/generate-bindings.sh
-```
+### 2. Prove one live settlement with the runner
 
-Docker fallback, only on a machine with sufficient Docker storage:
+`./scripts/test.sh` runs `tools/cmd/run-test`: it encrypts a bid to the live TEE key, submits it, requests the clear, fetches the threshold-tagged TEE signature from the proxy, relays it into `settleAuction`, and asserts the settled state. Set `DEALER_PRIVATE_KEY` for a two-wallet run. Preserve the printed instruction IDs and settlement tx hash.
 
-```bash
-docker run --rm \
-  --user "$(id -u):$(id -g)" \
-  -e HOME=/tmp \
-  -e GOCACHE=/tmp/go-cache \
-  -e GOPATH=/tmp/go \
-  -v "$PWD:/workspace" \
-  -w /workspace/tools \
-  golang:1.25.1 \
-  go generate ./pkg/contracts/quietfill/
-```
+### 3. Ship the frontend and run the public demo
 
-### 2. Finish Flare deployment-tool integration
-
-- Change `tools/pkg/utils/instructions.go` from the old `helloworld` binding to `quietfill`.
-- Deploy `QuietFillAuction` with four constructor arguments: Flare TEE extension registry, Flare TEE machine registry, FXRP token, and USDT0 token.
-- Make `tools/cmd/deploy-contract` require explicit base/quote token addresses and verify both addresses contain contract code before deployment.
-- Update `tools/cmd/run-test` to send an encrypted private bid and clear request, poll the proxy, then relay the returned signed clear result into `settleAuction`.
-- Do not invent token addresses. Resolve or verify current Coston2 FXRP and USDT0 addresses against official Flare sources and confirm `symbol()` and `decimals()` over RPC.
-
-### 3. Complete the live product
-
-- Build a seller/dealer web app using wagmi/viem.
-- Fetch the selected TEE public key and encrypt bids in the dealer's browser.
-- Poll the hosted extension proxy for receipts and the signed clear result.
-- Relay the signed result on-chain and display explorer-linked evidence.
-- Deploy the contract to Coston2, register the extension, keep the public proxy running, and deploy the frontend.
-- Run a real multi-wallet auction with faucet FXRP/USDT0 and preserve transaction hashes, contract addresses, extension ID, TEE ID, proxy URL, and screenshots/video.
+- `cd web && npm ci && npm run build`; deploy `web/dist/` to any static host. Users enter the contract address and proxy URL in the Connection panel (persisted in localStorage).
+- Run a real multi-wallet auction with faucet FXRP/USDT0 and preserve transaction hashes, contract address, extension ID, TEE ID, proxy URL, and screenshots/video.
+- Update the README Status section as pieces go live.
 
 ## Repository Provenance
 

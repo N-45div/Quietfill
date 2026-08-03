@@ -64,23 +64,24 @@ The signature format deliberately mirrors the scaffold's pinned `tee-node` revis
 | [typescript/src/app/](typescript/src/app/) | The FCC extension: envelope + bid decryption, monotonic nonces, deterministic clearing |
 | [test/QuietFillAuction.t.sol](test/QuietFillAuction.t.sol) | Foundry suite: settlement, forged/tampered/replayed signatures, unescrowed winner, no-fill, timeout, envelope binding |
 | [typescript/src/__tests__/](typescript/src/__tests__/) | Extension suite: privacy of `/state`, spoofing rejection, collar filtering, tie-breaks, wire shape |
-| [tools/](tools/) | Language-neutral Go tooling: deploy, register extension/TEE, end-to-end test runner |
+| [tools/](tools/) | Go tooling: verified deploy, register extension/TEE, and a runner that drives one real auction end to end |
+| [web/](web/) | Seller/dealer app (React + viem): in-browser ECIES bid encryption, TEE-key verification, signed-result relay |
 | [docs/](docs/) | Scaffold documentation (wire contract, extension guide, testing) |
 
 ## Run the tests
 
 ```bash
-forge test                 # 11 contract tests
-cd typescript
-npm ci && npm run typecheck && npm test   # 35 extension tests
+forge test                                    # 11 contract tests
+cd typescript && npm ci && npm test           # 35 extension tests
+cd ../web && npm ci && npm test               # 6 crypto tests, incl. a tee-node ECIES fixture
 ```
 
 ## Status
 
 - ✅ Auction contract with TEE-signature settlement — tested
 - ✅ TypeScript FCC extension with authenticated bid envelopes — tested
-- 🔨 Deployment tooling (Go bindings, Coston2 deploy, live end-to-end runner)
-- 🔨 Dealer/seller web app with in-browser bid encryption
+- ✅ Deployment tooling: verified Coston2 deploy + a runner that drives one real auction end to end
+- ✅ Seller/dealer web app — bid encryption byte-checked against the pinned tee-node revision
 - 🔜 Live Coston2 deployment with hosted FCC proxy
 
 ## Provenance
