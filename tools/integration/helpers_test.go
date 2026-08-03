@@ -29,7 +29,8 @@ import (
 	"testing"
 	"time"
 
-	"extension-scaffold/tools/pkg/contracts/helloworld"
+	"extension-scaffold/tools/pkg/contracts/quietfill"
+	"extension-scaffold/tools/pkg/contracts/testtoken"
 	"extension-scaffold/tools/pkg/fccutils"
 	"extension-scaffold/tools/pkg/support"
 
@@ -88,11 +89,45 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// deployFreshInstructionSender deploys a new InstructionSender contract using
+// testTokenPair caches one deployed base/quote TestToken pair for the whole
+// test run, so every fresh QuietFillAuction deployment doesn't redeploy them.
+var testTokenPair *[2]common.Address
+
+func deployedTestTokens(t *testing.T) (common.Address, common.Address) {
+	t.Helper()
+	if testTokenPair != nil {
+		return testTokenPair[0], testTokenPair[1]
+	}
+
+	deploy := func(name, symbol string) common.Address {
+		time.Sleep(rpcDelay)
+		opts, err := bind.NewKeyedTransactorWithChainID(testSupport.Prv, testSupport.ChainID)
+		if err != nil {
+			t.Fatalf("failed to create transactor: %v", err)
+		}
+		addr, tx, _, err := testtoken.DeployTestToken(opts, testSupport.ChainClient, name, symbol, 6)
+		if err != nil {
+			t.Fatalf("failed to deploy %s: %v", symbol, err)
+		}
+		if _, err := support.CheckTx(tx, testSupport.ChainClient); err != nil {
+			t.Fatalf("%s deployment failed: %v", symbol, err)
+		}
+		return addr
+	}
+
+	base := deploy("Test FXRP", "FXRP")
+	quote := deploy("Test USDT0", "USDT0")
+	testTokenPair = &[2]common.Address{base, quote}
+	t.Logf("Test tokens deployed: base=%s quote=%s", base.Hex(), quote.Hex())
+	return base, quote
+}
+
+// deployFreshInstructionSender deploys a new QuietFillAuction contract using
 // the registry addresses from testSupport. Returns the deployed address and
 // bound contract instance.
-func deployFreshInstructionSender(t *testing.T) (common.Address, *helloworld.HelloWorldInstructionSender) {
+func deployFreshInstructionSender(t *testing.T) (common.Address, *quietfill.QuietFillAuction) {
 	t.Helper()
+	base, quote := deployedTestTokens(t)
 	time.Sleep(rpcDelay)
 
 	opts, err := bind.NewKeyedTransactorWithChainID(testSupport.Prv, testSupport.ChainID)
@@ -100,13 +135,14 @@ func deployFreshInstructionSender(t *testing.T) (common.Address, *helloworld.Hel
 		t.Fatalf("failed to create transactor: %v", err)
 	}
 
-	address, tx, contract, err := helloworld.DeployHelloWorldInstructionSender(
+	address, tx, contract, err := quietfill.DeployQuietFillAuction(
 		opts, testSupport.ChainClient,
 		testSupport.Addresses.FlareTeeManager,
 		testSupport.Addresses.FlareTeeManager,
+		base, quote,
 	)
 	if err != nil {
-		t.Fatalf("failed to deploy InstructionSender: %v", err)
+		t.Fatalf("failed to deploy QuietFillAuction: %v", err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
@@ -119,15 +155,16 @@ func deployFreshInstructionSender(t *testing.T) (common.Address, *helloworld.Hel
 		t.Fatalf("deployment tx failed with status %d", receipt.Status)
 	}
 
-	t.Logf("Deployed InstructionSender at %s (tx: %s)", address.Hex(), tx.Hash().Hex())
+	t.Logf("Deployed QuietFillAuction at %s (tx: %s)", address.Hex(), tx.Hash().Hex())
 	return address, contract
 }
 
-// deployInstructionSenderRaw attempts to deploy an InstructionSender with
-// arbitrary registry addresses. Returns the error directly without fataling,
-// so the caller can assert on the error.
+// deployInstructionSenderRaw attempts to deploy a QuietFillAuction with
+// arbitrary registry addresses (tokens stay valid). Returns the error
+// directly without fataling, so the caller can assert on the error.
 func deployInstructionSenderRaw(t *testing.T, registryAddr, machineRegistryAddr common.Address) error {
 	t.Helper()
+	base, quote := deployedTestTokens(t)
 	time.Sleep(rpcDelay)
 
 	opts, err := bind.NewKeyedTransactorWithChainID(testSupport.Prv, testSupport.ChainID)
@@ -135,9 +172,10 @@ func deployInstructionSenderRaw(t *testing.T, registryAddr, machineRegistryAddr 
 		t.Fatalf("failed to create transactor: %v", err)
 	}
 
-	_, _, _, err = helloworld.DeployHelloWorldInstructionSender(
+	_, _, _, err = quietfill.DeployQuietFillAuction(
 		opts, testSupport.ChainClient,
 		registryAddr, machineRegistryAddr,
+		base, quote,
 	)
 	return err
 }

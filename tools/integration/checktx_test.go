@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"extension-scaffold/tools/pkg/contracts/helloworld"
+	"extension-scaffold/tools/pkg/contracts/quietfill"
 	"extension-scaffold/tools/pkg/support"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -21,15 +21,17 @@ import (
 
 func TestCheckTx_SuccessfulTx(t *testing.T) {
 	// Deploy a fresh InstructionSender — the deployment tx itself is successful.
+	base, quote := deployedTestTokens(t)
 	opts, err := bind.NewKeyedTransactorWithChainID(testSupport.Prv, testSupport.ChainID)
 	if err != nil {
 		t.Fatalf("transactor: %v", err)
 	}
 
-	_, tx, _, err := helloworld.DeployHelloWorldInstructionSender(
+	_, tx, _, err := quietfill.DeployQuietFillAuction(
 		opts, testSupport.ChainClient,
 		testSupport.Addresses.FlareTeeManager,
 		testSupport.Addresses.FlareTeeManager,
+		base, quote,
 	)
 	if err != nil {
 		t.Fatalf("deploy failed: %v", err)

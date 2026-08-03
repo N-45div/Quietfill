@@ -104,6 +104,8 @@ go run ./cmd/run-test \
     -c "$CHAIN_URL" \
     -p "$EXT_PROXY_URL" \
     -instructionSender "$INSTRUCTION_SENDER" \
+    -baseToken "${BASE_TOKEN:-}" \
+    -quoteToken "${QUOTE_TOKEN:-}" \
     || die "Test failed"
 
 echo ""

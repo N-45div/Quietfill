@@ -28,27 +28,26 @@ if ! grep -q "contract ${CONTRACT_NAME}" "$PROJECT_DIR/contracts/InstructionSend
 fi
 
 echo "=== Step 2: Extract ABI and BIN ==="
-FORGE_OUT="$PROJECT_DIR/out/InstructionSender.sol/${CONTRACT_NAME}.json"
-if [[ ! -f "$FORGE_OUT" ]]; then
-    echo "ERROR: forge output not found at $FORGE_OUT"
-    echo "Check that CONTRACT_NAME matches your Solidity contract name."
-    exit 1
-fi
+extract() {
+    local forge_out="$1" contract="$2" dir="$3"
+    if [[ ! -f "$forge_out" ]]; then
+        echo "ERROR: forge output not found at $forge_out"
+        echo "Check that the contract name matches your Solidity contract name."
+        exit 1
+    fi
+    mkdir -p "$dir"
+    jq '.abi' "$forge_out" > "$dir/${contract}.abi"
+    jq -r '.bytecode.object' "$forge_out" | sed 's/^0x//' > "$dir/${contract}.bin"
+    echo "  ABI → $dir/${contract}.abi"
+    echo "  BIN → $dir/${contract}.bin"
+}
 
-mkdir -p "$BINDINGS_DIR"
-
-# Extract ABI (JSON array)
-jq '.abi' "$FORGE_OUT" > "$BINDINGS_DIR/${CONTRACT_NAME}.abi"
-
-# Extract bytecode (hex string, strip 0x prefix)
-jq -r '.bytecode.object' "$FORGE_OUT" | sed 's/^0x//' > "$BINDINGS_DIR/${CONTRACT_NAME}.bin"
-
-echo "  ABI → $BINDINGS_DIR/${CONTRACT_NAME}.abi"
-echo "  BIN → $BINDINGS_DIR/${CONTRACT_NAME}.bin"
+extract "$PROJECT_DIR/out/InstructionSender.sol/${CONTRACT_NAME}.json" "$CONTRACT_NAME" "$BINDINGS_DIR"
+extract "$PROJECT_DIR/out/TestToken.sol/TestToken.json" "TestToken" "$PROJECT_DIR/tools/pkg/contracts/testtoken"
 
 echo "=== Step 3: Generate Go bindings ==="
 cd "$PROJECT_DIR/tools"
-go generate ./pkg/contracts/$GO_PKG/
+go generate ./pkg/contracts/$GO_PKG/ ./pkg/contracts/testtoken/
 
 echo "=== Done ==="
 echo "Generated: $BINDINGS_DIR/autogen.go"
