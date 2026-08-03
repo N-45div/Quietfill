@@ -373,6 +373,123 @@ dl.facts dd { margin: 0; font-family: ui-monospace, "Cascadia Mono", monospace; 
 
 .notice { color: var(--warn); font-size: 13px; }
 
+/* ---------- trade page & chart ---------- */
+
+.trade-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 22px;
+}
+.trade-head h2 { margin: 0 0 6px; font-size: 26px; letter-spacing: -0.5px; }
+
+.launch-band {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 28px 30px;
+  background: linear-gradient(160deg, rgba(139, 124, 255, 0.1), rgba(34, 211, 238, 0.05)),
+    var(--panel-solid);
+  margin-top: 8px;
+}
+.launch-band h2 { margin: 0 0 6px; }
+
+.chart-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.chart-head .hint { margin-bottom: 6px; }
+
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-soft);
+}
+.seg button {
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 12.5px;
+  padding: 7px 14px;
+  box-shadow: none;
+}
+.seg button:hover:not(:disabled) { transform: none; box-shadow: none; color: var(--text); }
+.seg button.on { background: rgba(139, 124, 255, 0.18); color: var(--text); }
+
+.chart-stats {
+  display: flex;
+  gap: 34px;
+  flex-wrap: wrap;
+  margin: 14px 0 6px;
+}
+.chart-stats .stat .k {
+  display: block;
+  font-size: 22px;
+  font-weight: 700;
+  font-family: ui-monospace, "Cascadia Mono", monospace;
+  letter-spacing: -0.5px;
+}
+.chart-stats .stat .k.up { color: var(--ok); }
+.chart-stats .stat .k.down { color: var(--err); }
+.chart-stats .stat .l {
+  font-size: 11.5px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.chart-plot { position: relative; }
+.chart-plot svg { display: block; width: 100%; height: auto; cursor: crosshair; }
+.chart-plot .grid { stroke: var(--border-soft); stroke-width: 1; }
+.chart-plot .axis {
+  fill: var(--muted);
+  font-size: 10.5px;
+  font-family: ui-monospace, "Cascadia Mono", monospace;
+}
+.chart-plot .axis.mid { text-anchor: middle; }
+.chart-plot .series { fill: none; stroke: var(--accent); stroke-width: 2; }
+.chart-plot .crosshair { stroke: rgba(255, 255, 255, 0.25); stroke-width: 1; stroke-dasharray: 3 3; }
+.chart-plot .dot { fill: var(--accent); stroke: var(--panel-solid); stroke-width: 2; }
+.chart-tip {
+  position: absolute;
+  transform: translate(-50%, -140%);
+  background: #1a2030;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 5px 10px;
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.chart-empty { color: var(--muted); padding: 28px 0; }
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* ---------- footer ---------- */
 
 footer.foot {

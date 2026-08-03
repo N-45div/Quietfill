@@ -8,6 +8,10 @@ Built for Flare's Summer Signal hackathon on DoraHacks, on top of Flare's offici
 
 ![QuietFill — sealed-bid auctions on Flare](docs/screenshots/landing-desktop.png)
 
+The trade page pairs the live XRP/USD market rate (FXRP tracks XRP) with the sealed-bid panels, so collars and private bids are priced off the real market:
+
+![QuietFill trade page with live market rate](docs/screenshots/trade-desktop.png)
+
 ## Why
 
 On a public order book every losing quote is free information: competitors learn your spread, and visible bids invite last-look sniping and front-running. Off-chain RFQ desks solve this with trust — you send your price to a broker and hope. QuietFill replaces that trust with hardware attestation and a signature check:
