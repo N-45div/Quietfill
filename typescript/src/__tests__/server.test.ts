@@ -84,13 +84,12 @@ describe("QuietFill wire server", () => {
     ]);
   });
 
-  it("returns price-free state", async () => {
+  it("returns count-free, price-free state", async () => {
     const [status, body] = await server.handleRequest("GET", "/state", "");
     expect(status).toBe(200);
     expect((body as { state: unknown }).state).toEqual({
-      auctionsTracked: 0,
-      privateBidCount: 0,
       pricesExposed: false,
+      bidsExposed: false,
     });
   });
 

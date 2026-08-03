@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { fetchFtsoXrpUsd, type FtsoRate } from "../lib/ftso";
+
 /**
  * Live XRP/USD market rate (FXRP tracks XRP 1:1) from CoinGecko's public API.
  * Real data only — on failure the card says so and offers a retry, it never
@@ -47,7 +49,22 @@ export function MarketChart() {
   const [range, setRange] = useState<RangeLabel>("7D");
   const [state, setState] = useState<State>({ kind: "loading" });
   const [hover, setHover] = useState<number | null>(null);
+  const [ftso, setFtso] = useState<FtsoRate | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
+
+  useEffect(() => {
+    let alive = true;
+    const pull = () =>
+      fetchFtsoXrpUsd()
+        .then((r) => alive && setFtso(r))
+        .catch(() => alive && setFtso(null));
+    pull();
+    const t = setInterval(pull, 60_000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, []);
 
   const days = RANGES.find((r) => r.label === range)!.days;
 
@@ -130,8 +147,8 @@ export function MarketChart() {
         <div>
           <h2>XRP market rate</h2>
           <p className="hint">
-            FXRP tracks XRP — price your collar and bids off the live rate. Data: CoinGecko,
-            XRP/USD.
+            FXRP tracks XRP — price your collar and bids off the live rate. Data: CoinGecko
+            XRP/USD + Flare&apos;s FTSO oracle, read on-chain.
           </p>
         </div>
         <div className="seg" role="tablist" aria-label="Time range">
@@ -168,6 +185,12 @@ export function MarketChart() {
                 {hovered ? fmtTime(hovered.t, days) : "current"}
               </span>
             </div>
+            {ftso && (
+              <div className="stat">
+                <span className="k">{fmtUsd(ftso.price)}</span>
+                <span className="l">FTSO on-chain</span>
+              </div>
+            )}
             <div className="stat">
               <span className={`k ${up ? "up" : "down"}`}>
                 {up ? "▲" : "▼"} {Math.abs(change).toFixed(2)}%

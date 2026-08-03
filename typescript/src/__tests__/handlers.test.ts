@@ -63,6 +63,7 @@ function clear(overrides: Partial<Parameters<typeof encodeClearMessage>[0]> = {}
 beforeEach(() => {
   handlers.resetState();
   handlers.setDecryptorForTests(identityDecryptor);
+  handlers.setClearRetentionForTests(10 * 60 * 1000);
 });
 
 describe("private bid receipts", () => {
@@ -111,12 +112,11 @@ describe("private bid receipts", () => {
     expect(result[2]).toContain("escrowed auction");
   });
 
-  it("does not expose prices through state", async () => {
+  it("exposes neither prices nor bid counts through state", async () => {
     await submit(bid());
     expect(handlers.reportState()).toEqual({
-      auctionsTracked: 1,
-      privateBidCount: 1,
       pricesExposed: false,
+      bidsExposed: false,
     });
   });
 });
@@ -185,5 +185,37 @@ describe("deterministic clearing", () => {
     });
     expect(result[1]).toBe(0);
     expect(result[2]).toContain("ceiling price");
+  });
+});
+
+describe("post-clear data minimization", () => {
+  it("purges plaintext bids and rejects new ones after the clear", async () => {
+    await submit(bid());
+    expect(clear()[1]).toBe(1);
+
+    const late = await submit(bid({ nonce: 99n }));
+    expect(late[1]).toBe(0);
+    expect(late[2]).toContain("already cleared");
+  });
+
+  it("returns a byte-identical cached result for a re-delivered clear", async () => {
+    await submit(bid());
+    const first = clear();
+    const second = clear();
+    expect(second[1]).toBe(1);
+    expect(second[0]).toBe(first[0]);
+  });
+
+  it("forgets even the cached result after the retention window", async () => {
+    handlers.setClearRetentionForTests(0);
+    await submit(bid());
+    const first = decodeClearResult(clear()[0] as Hex);
+    expect(first.winner).toBe(ALICE);
+
+    // Cache expired and bids were purged at the first clear, so a later
+    // clear finds nothing at all.
+    const second = decodeClearResult(clear()[0] as Hex);
+    expect(second.winner).toBe(zeroAddress);
+    expect(second.submittedBidCount).toBe(0n);
   });
 });

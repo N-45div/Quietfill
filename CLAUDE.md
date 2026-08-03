@@ -42,8 +42,11 @@ Security invariants that must not be weakened:
 5. Every terminal path lets the seller recover FXRP and every non-winning dealer recover USDT0.
 6. An auction must have a timeout path if the hosted TEE or proxy becomes unavailable.
 7. The TEE only accepts a plaintext whose bidder and auction match the contract-authenticated instruction envelope, so no bidder can overwrite or displace another bidder's stored bid.
+8. The TEE minimizes data: plaintext bids are purged the moment an auction clears, a re-delivered CLEAR instruction returns the cached byte-identical result (forgotten after a retention window), bids after a clear are rejected, and `/state` exposes no bid counts.
 
 Contract tests live in `test/QuietFillAuction.t.sol`. They cover valid settlement, forged signatures, relayer tampering, replay, an unescrowed winner, no-fill, timeout recovery, late bids, replacement bids, registry-selected TEE pinning, and envelope binding.
+
+The web app reads Flare's FTSOv2 XRP/USD feed on-chain (ContractRegistry → FtsoV2 over the public Coston2 RPC) as the reference rate beside CoinGecko, and sellers can set the collar at FTSO ±5% in one click.
 
 The Go tooling in `tools/` deploys QuietFillAuction (with verified escrow-token addresses, or auto-deployed mintable TestTokens on a local devnet) and `run-test` drives one real auction end to end against a running FCC stack. The web app in `web/` (React + viem) is the seller/dealer product: it encrypts bids in the browser with a tee-node-compatible ECIES implementation (Go cross-check fixture committed in `web/src/lib/ecies.test.ts`), verifies the proxy TEE key against the auction's pinned teeId before encrypting, and relays the signed clear result into `settleAuction`.
 

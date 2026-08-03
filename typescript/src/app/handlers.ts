@@ -34,14 +34,33 @@ interface StoredBid extends PrivateBid {
 }
 
 const auctions = new Map<string, Map<string, StoredBid>>();
+
+/**
+ * Once an auction clears, its plaintext bids are purged immediately and only
+ * the encoded (price-revealing-for-the-winner-only) result is kept, so a
+ * re-delivered CLEAR instruction gets a byte-identical answer. After the
+ * retention window even that is forgotten.
+ */
+interface ClearedAuction {
+  result: Hex;
+  expiresAt: number;
+}
+const cleared = new Map<string, ClearedAuction>();
+let clearRetentionMs = 10 * 60 * 1000;
+
 let decryptor: Decryptor = new NodeClient(process.env.SIGN_PORT ?? "9090");
 
 export function setDecryptorForTests(next: Decryptor): void {
   decryptor = next;
 }
 
+export function setClearRetentionForTests(ms: number): void {
+  clearRetentionMs = ms;
+}
+
 export function resetState(): void {
   auctions.clear();
+  cleared.clear();
 }
 
 export function register(framework: Framework): void {
@@ -49,14 +68,18 @@ export function register(framework: Framework): void {
   framework.handle(OP_TYPE_QUIETFILL, OP_COMMAND_CLEAR, handleClear);
 }
 
+/**
+ * Deliberately count-free: bid flow must not be observable through the
+ * public /state endpoint — not even as aggregates.
+ */
 export function reportState(): unknown {
-  let privateBidCount = 0;
-  for (const bids of auctions.values()) privateBidCount += bids.size;
-  return {
-    auctionsTracked: auctions.size,
-    privateBidCount,
-    pricesExposed: false,
-  };
+  return { pricesExposed: false, bidsExposed: false };
+}
+
+function pruneCleared(now: number): void {
+  for (const [key, entry] of cleared) {
+    if (entry.expiresAt <= now) cleared.delete(key);
+  }
 }
 
 export async function handlePrivateBid(messageHex: string): Promise<HandlerResult> {
@@ -102,6 +125,11 @@ export async function handlePrivateBid(messageHex: string): Promise<HandlerResul
   }
 
   const auctionKey = keyForAuction(bid.contractAddr, bid.auctionId);
+  pruneCleared(Date.now());
+  if (cleared.has(auctionKey)) {
+    return failure("auction already cleared");
+  }
+
   const bidderKey = bid.bidder.toLowerCase();
   const bids = auctions.get(auctionKey) ?? new Map<string, StoredBid>();
   const previous = bids.get(bidderKey);
@@ -139,7 +167,16 @@ export function handleClear(messageHex: string): HandlerResult {
     return failure("ceiling price must be at least floor price");
   }
 
-  const bids = auctions.get(keyForAuction(message.contractAddr, message.auctionId));
+  const auctionKey = keyForAuction(message.contractAddr, message.auctionId);
+  const now = Date.now();
+  pruneCleared(now);
+
+  // Idempotent: a re-delivered clear instruction gets the identical result
+  // even though the plaintext bids are already purged.
+  const already = cleared.get(auctionKey);
+  if (already) return success(already.result);
+
+  const bids = auctions.get(auctionKey);
   const submitted = bids?.size ?? 0;
   const eligible = [...(bids?.values() ?? [])].filter(
     (bid) =>
@@ -154,18 +191,22 @@ export function handleClear(messageHex: string): HandlerResult {
   });
 
   const winner = eligible[0];
-  return success(
-    encodeClearResult({
-      contractAddr: message.contractAddr,
-      auctionId: message.auctionId,
-      winner: winner?.bidder ?? zeroAddress,
-      unitPriceWei: winner?.unitPriceWei ?? 0n,
-      winningNonce: winner?.nonce ?? 0n,
-      winningCommitment: winner?.commitment ?? zeroHash,
-      submittedBidCount: BigInt(submitted),
-      eligibleBidCount: BigInt(eligible.length),
-    }),
-  );
+  const result = encodeClearResult({
+    contractAddr: message.contractAddr,
+    auctionId: message.auctionId,
+    winner: winner?.bidder ?? zeroAddress,
+    unitPriceWei: winner?.unitPriceWei ?? 0n,
+    winningNonce: winner?.nonce ?? 0n,
+    winningCommitment: winner?.commitment ?? zeroHash,
+    submittedBidCount: BigInt(submitted),
+    eligibleBidCount: BigInt(eligible.length),
+  });
+
+  // Data minimization: the losing plaintext prices are gone the moment the
+  // auction clears; only the encoded result survives, and only briefly.
+  cleared.set(auctionKey, { result, expiresAt: now + clearRetentionMs });
+  auctions.delete(auctionKey);
+  return success(result);
 }
 
 function validateBid(bid: PrivateBid): string | null {

@@ -8,7 +8,7 @@ Built for Flare's Summer Signal hackathon on DoraHacks, on top of Flare's offici
 
 ![QuietFill — sealed-bid auctions on Flare](docs/screenshots/landing-desktop.png)
 
-The trade page pairs the live XRP/USD market rate (FXRP tracks XRP) with the sealed-bid panels, so collars and private bids are priced off the real market:
+The trade page pairs the live XRP/USD market rate — CoinGecko plus **Flare's FTSO oracle read on-chain** — with the sealed-bid panels, so collars and private bids are priced off the real market (sellers get a one-click collar at FTSO ±5%):
 
 ![QuietFill trade page with live market rate](docs/screenshots/trade-desktop.png)
 
@@ -59,6 +59,9 @@ sequenceDiagram
 | Winner can always pay | Full ceiling escrow is a precondition for winning a settlement |
 | No admin risk | No owner, no upgradability, no settable signer — the TEE address comes from Flare's registry at auction creation |
 | Liveness failure ≠ fund loss | Post-deadline cancellation and pull-based refunds need no TEE |
+| Data minimization inside the enclave | Plaintext bids are purged the moment an auction clears (re-delivered clears get a cached, byte-identical result); the public `/state` endpoint exposes no bid counts at all |
+
+What stays public — honestly: *who* escrowed into an auction and how many times they repriced is visible from ERC-20 transfers and events, as on any public chain. QuietFill hides prices and intent, not participation; settlement is fully auditable by design.
 
 The signature format deliberately mirrors the scaffold's pinned `tee-node` revision (`31fc839ae6d2`) rather than a generic `signMessage`; see [CLAUDE.md](CLAUDE.md) for the exact derivation.
 
@@ -78,7 +81,7 @@ The signature format deliberately mirrors the scaffold's pinned `tee-node` revis
 
 ```bash
 forge test                                    # 11 contract tests
-cd typescript && npm ci && npm test           # 35 extension tests
+cd typescript && npm ci && npm test           # 38 extension tests
 cd ../web && npm ci && npm test               # 6 crypto tests, incl. a tee-node ECIES fixture
 ```
 

@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { parseEventLogs } from "viem";
 
 import type { AppContext } from "../App";
+import { fetchFtsoXrpUsd, type FtsoRate } from "../lib/ftso";
 import { erc20Abi, INSTRUCTION_FEE_WEI, parseUnits, quietFillAbi } from "../lib/quietfill";
 import { explorerTxUrl } from "../lib/wallet";
 
@@ -12,6 +13,24 @@ export function SellerPanel({ ctx }: { ctx: AppContext }) {
   const [ceiling, setCeiling] = useState("2.5");
   const [windowMin, setWindowMin] = useState("10");
   const [busy, setBusy] = useState(false);
+  const [ftso, setFtso] = useState<FtsoRate | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetchFtsoXrpUsd()
+      .then((r) => alive && setFtso(r))
+      .catch(() => alive && setFtso(null));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const collarFromFtso = () => {
+    if (!ftso) return;
+    setFloor((ftso.price * 0.95).toFixed(4));
+    setCeiling((ftso.price * 1.05).toFixed(4));
+    ctx.log(`Collar set from the FTSO on-chain rate: $${ftso.price.toFixed(4)} ±5%`);
+  };
 
   const create = async () => {
     setBusy(true);
@@ -111,6 +130,14 @@ export function SellerPanel({ ctx }: { ctx: AppContext }) {
       </div>
       <button onClick={create} disabled={busy}>
         {busy ? "Working…" : "Escrow lot & create auction"}
+      </button>
+      <button
+        className="secondary"
+        onClick={collarFromFtso}
+        disabled={!ftso}
+        title={ftso ? `FTSO XRP/USD: $${ftso.price.toFixed(4)}` : "FTSO rate unavailable"}
+      >
+        Collar from FTSO ±5%
       </button>
     </section>
   );
