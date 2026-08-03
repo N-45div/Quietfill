@@ -6,6 +6,8 @@ QuietFill lets a seller auction a fixed lot of FXRP to competing dealers without
 
 Built for Flare's Summer Signal hackathon on DoraHacks, on top of Flare's official FCC extension scaffold ([provenance](#provenance)).
 
+![QuietFill — sealed-bid auctions on Flare](docs/screenshots/landing-desktop.png)
+
 ## Why
 
 On a public order book every losing quote is free information: competitors learn your spread, and visible bids invite last-look sniping and front-running. Off-chain RFQ desks solve this with trust — you send your price to a broker and hope. QuietFill replaces that trust with hardware attestation and a signature check:
