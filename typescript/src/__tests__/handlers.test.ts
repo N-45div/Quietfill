@@ -1,144 +1,168 @@
-/** Hello World handlers — behaviour must match go/internal/extension/extension.go. */
+import { hexToBytes, zeroAddress, zeroHash, type Address, type Hex } from "viem";
+import { beforeEach, describe, expect, it } from "vitest";
 
-import { encodeAbiParameters } from "viem";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-
+import {
+  decodeBidReceipt,
+  decodeClearResult,
+  encodeClearMessage,
+  encodePrivateBid,
+  type PrivateBid,
+} from "../app/abi.js";
 import * as handlers from "../app/handlers.js";
-import { bytesToHex, hexToBytes } from "../base/encoding.js";
-import type { HandlerResult } from "../base/types.js";
 
-const GOODBYE_PARAMS = [
-  {
-    type: "tuple",
-    components: [
-      { name: "name", type: "string" },
-      { name: "reason", type: "string" },
-    ],
+const CONTRACT_A = "0x1000000000000000000000000000000000000001" as Address;
+const CONTRACT_B = "0x1000000000000000000000000000000000000002" as Address;
+const ALICE = "0x2000000000000000000000000000000000000001" as Address;
+const BOB = "0x2000000000000000000000000000000000000002" as Address;
+const SALT_A = `0x${"11".repeat(32)}` as Hex;
+const SALT_B = `0x${"22".repeat(32)}` as Hex;
+
+const identityDecryptor = {
+  async decrypt(ciphertext: Uint8Array) {
+    return ciphertext;
   },
-] as const;
+};
 
-function jsonMsg(obj: unknown): string {
-  return bytesToHex(Buffer.from(JSON.stringify(obj), "utf-8"));
+function bid(overrides: Partial<PrivateBid> = {}): PrivateBid {
+  return {
+    bidder: ALICE,
+    contractAddr: CONTRACT_A,
+    auctionId: 1n,
+    nonce: 1n,
+    unitPriceWei: 2_000_000_000_000_000_000n,
+    salt: SALT_A,
+    ...overrides,
+  };
 }
 
-function goodbyeMsg(name: string, reason: string): string {
-  return encodeAbiParameters(GOODBYE_PARAMS, [{ name, reason }]);
+async function submit(value: PrivateBid) {
+  return handlers.handlePrivateBid(encodePrivateBid(value));
 }
 
-function parseData(result: HandlerResult): Record<string, unknown> {
-  return JSON.parse(Buffer.from(hexToBytes(result[0]!)).toString("utf-8"));
+function clear(overrides: Partial<Parameters<typeof encodeClearMessage>[0]> = {}) {
+  return handlers.handleClear(
+    encodeClearMessage({
+      auctionId: 1n,
+      contractAddr: CONTRACT_A,
+      floorPriceWei: 1_800_000_000_000_000_000n,
+      ceilingPriceWei: 2_200_000_000_000_000_000n,
+      ...overrides,
+    }),
+  );
 }
 
-beforeEach(() => handlers.resetState());
-afterEach(() => handlers.resetState());
+beforeEach(() => {
+  handlers.resetState();
+  handlers.setDecryptorForTests(identityDecryptor);
+});
 
-describe("handleSayHello", () => {
-  it("greets and returns the counter", () => {
-    const r = handlers.handleSayHello(jsonMsg({ name: "World" }));
-    expect([r[1], r[2]]).toEqual([1, null]);
-    expect(parseData(r)).toEqual({
-      greeting: "Hello, World! Welcome to Flare Confidential Compute.",
-      greetingNumber: 1,
+describe("private bid receipts", () => {
+  it("decrypts a bid and returns a price-free public receipt", async () => {
+    const result = await submit(bid());
+    expect(result[1]).toBe(1);
+
+    const receipt = decodeBidReceipt(result[0] as Hex);
+    expect(receipt.contractAddr).toBe(CONTRACT_A);
+    expect(receipt.auctionId).toBe(1n);
+    expect(receipt.bidder).toBe(ALICE);
+    expect(receipt.nonce).toBe(1n);
+    expect(receipt.bidCommitment).not.toBe(zeroHash);
+    expect(result[0]).not.toContain("1bc16d674ec80000");
+  });
+
+  it("allows replacement only with a higher nonce", async () => {
+    expect((await submit(bid()))[1]).toBe(1);
+    expect((await submit(bid({ nonce: 1n, unitPriceWei: 2_100_000_000_000_000_000n })))[1]).toBe(0);
+    expect((await submit(bid({ nonce: 2n, unitPriceWei: 2_100_000_000_000_000_000n })))[1]).toBe(1);
+
+    const result = clear();
+    expect(decodeClearResult(result[0] as Hex).unitPriceWei).toBe(
+      2_100_000_000_000_000_000n,
+    );
+  });
+
+  it("rejects malformed and invalid bids", async () => {
+    expect((await handlers.handlePrivateBid("0x"))[1]).toBe(0);
+    expect((await submit(bid({ bidder: zeroAddress })))[1]).toBe(0);
+    expect((await submit(bid({ auctionId: 0n })))[1]).toBe(0);
+    expect((await submit(bid({ nonce: 0n })))[1]).toBe(0);
+    expect((await submit(bid({ unitPriceWei: 0n })))[1]).toBe(0);
+    expect((await submit(bid({ salt: zeroHash })))[1]).toBe(0);
+  });
+
+  it("does not expose prices through state", async () => {
+    await submit(bid());
+    expect(handlers.reportState()).toEqual({
+      auctionsTracked: 1,
+      privateBidCount: 1,
+      pricesExposed: false,
     });
-  });
-
-  it("increments the counter across calls", () => {
-    for (const expected of [1, 2, 3]) {
-      const r = handlers.handleSayHello(jsonMsg({ name: "A" }));
-      expect(parseData(r).greetingNumber).toBe(expected);
-    }
-  });
-
-  it("rejects an empty name", () => {
-    const r = handlers.handleSayHello(jsonMsg({ name: "" }));
-    expect([r[0], r[1]]).toEqual([null, 0]);
-    expect(r[2]).toContain("name must not be empty");
-  });
-
-  it("rejects a missing name", () => {
-    const r = handlers.handleSayHello(jsonMsg({}));
-    expect(r[1]).toBe(0);
-    expect(r[2]).toContain("name must not be empty");
-  });
-
-  it("rejects unknown fields, matching Go's DisallowUnknownFields", () => {
-    const r = handlers.handleSayHello(jsonMsg({ name: "A", extra: 1 }));
-    expect(r[1]).toBe(0);
-    expect(r[2]).toContain("unknown field");
-  });
-
-  it("rejects invalid JSON", () => {
-    const r = handlers.handleSayHello(bytesToHex(Buffer.from("not json")));
-    expect(r[1]).toBe(0);
-    expect(r[2]).toContain("decoding request");
-  });
-
-  it("rejects invalid hex", () => {
-    const r = handlers.handleSayHello("0xZZ");
-    expect(r[1]).toBe(0);
-    expect(r[2]).toContain("decoding request");
-  });
-
-  it("does not increment the counter on failure", () => {
-    handlers.handleSayHello(jsonMsg({ name: "" }));
-    const r = handlers.handleSayHello(jsonMsg({ name: "A" }));
-    expect(parseData(r).greetingNumber).toBe(1);
   });
 });
 
-describe("handleSayGoodbye", () => {
-  it("decodes the ABI payload and returns a farewell", () => {
-    const r = handlers.handleSayGoodbye(goodbyeMsg("World", "done"));
-    expect([r[1], r[2]]).toEqual([1, null]);
-    expect(parseData(r)).toEqual({
-      farewell: "Goodbye, World! Reason: done",
-      farewellNumber: 1,
+describe("deterministic clearing", () => {
+  it("selects the highest eligible bid", async () => {
+    await submit(bid({ bidder: ALICE, unitPriceWei: 1_950_000_000_000_000_000n }));
+    await submit(
+      bid({
+        bidder: BOB,
+        unitPriceWei: 2_050_000_000_000_000_000n,
+        salt: SALT_B,
+      }),
+    );
+
+    const result = decodeClearResult(clear()[0] as Hex);
+    expect(result.winner).toBe(BOB);
+    expect(result.unitPriceWei).toBe(2_050_000_000_000_000_000n);
+    expect(result.submittedBidCount).toBe(2n);
+    expect(result.eligibleBidCount).toBe(2n);
+  });
+
+  it("ignores bids outside the immutable price collar", async () => {
+    await submit(bid({ bidder: ALICE, unitPriceWei: 2_500_000_000_000_000_000n }));
+    await submit(
+      bid({
+        bidder: BOB,
+        unitPriceWei: 2_100_000_000_000_000_000n,
+        salt: SALT_B,
+      }),
+    );
+
+    const result = decodeClearResult(clear()[0] as Hex);
+    expect(result.winner).toBe(BOB);
+    expect(result.submittedBidCount).toBe(2n);
+    expect(result.eligibleBidCount).toBe(1n);
+  });
+
+  it("breaks equal-price ties by the lower bidder address", async () => {
+    await submit(bid({ bidder: BOB, salt: SALT_B }));
+    await submit(bid({ bidder: ALICE, salt: SALT_A }));
+    expect(decodeClearResult(clear()[0] as Hex).winner).toBe(ALICE);
+  });
+
+  it("returns an explicit no-fill result", () => {
+    const result = decodeClearResult(clear()[0] as Hex);
+    expect(result.winner).toBe(zeroAddress);
+    expect(result.unitPriceWei).toBe(0n);
+    expect(result.winningCommitment).toBe(zeroHash);
+    expect(result.submittedBidCount).toBe(0n);
+    expect(result.eligibleBidCount).toBe(0n);
+  });
+
+  it("isolates auctions by contract and auction id", async () => {
+    await submit(bid({ contractAddr: CONTRACT_B, unitPriceWei: 2_100_000_000_000_000_000n }));
+    expect(decodeClearResult(clear()[0] as Hex).winner).toBe(zeroAddress);
+    expect(
+      decodeClearResult(clear({ contractAddr: CONTRACT_B })[0] as Hex).winner,
+    ).toBe(ALICE);
+  });
+
+  it("rejects an invalid collar", () => {
+    const result = clear({
+      floorPriceWei: 3n,
+      ceilingPriceWei: 2n,
     });
-  });
-
-  it("keeps its counter independent of greetings", () => {
-    handlers.handleSayHello(jsonMsg({ name: "A" }));
-    const r = handlers.handleSayGoodbye(goodbyeMsg("B", "r"));
-    expect(parseData(r).farewellNumber).toBe(1);
-  });
-
-  it("rejects an empty name", () => {
-    const r = handlers.handleSayGoodbye(goodbyeMsg("", "r"));
-    expect(r[1]).toBe(0);
-    expect(r[2]).toContain("name must not be empty");
-  });
-
-  it("allows an empty reason, matching Go which validates name only", () => {
-    const r = handlers.handleSayGoodbye(goodbyeMsg("W", ""));
-    expect(r[1]).toBe(1);
-    expect(parseData(r).farewell).toBe("Goodbye, W! Reason: ");
-  });
-
-  it("rejects a JSON payload — this operation is ABI-encoded", () => {
-    const r = handlers.handleSayGoodbye(jsonMsg({ name: "W" }));
-    expect(r[1]).toBe(0);
-    expect(r[2]).toContain("decoding request");
-  });
-});
-
-describe("reportState", () => {
-  it("starts empty", () => {
-    expect(handlers.reportState()).toEqual({
-      greetingCount: 0,
-      lastGreeting: "",
-      farewellCount: 0,
-      lastFarewell: "",
-    });
-  });
-
-  it("tracks both operations", () => {
-    handlers.handleSayHello(jsonMsg({ name: "A" }));
-    handlers.handleSayGoodbye(goodbyeMsg("B", "r"));
-    expect(handlers.reportState()).toEqual({
-      greetingCount: 1,
-      lastGreeting: "Hello, A! Welcome to Flare Confidential Compute.",
-      farewellCount: 1,
-      lastFarewell: "Goodbye, B! Reason: r",
-    });
+    expect(result[1]).toBe(0);
+    expect(result[2]).toContain("ceiling price");
   });
 });

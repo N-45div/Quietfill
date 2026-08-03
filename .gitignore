@@ -56,6 +56,9 @@ docs/superpowers
 
 notes/
 
+# Private hackathon strategy, research, and milestone tracking.
+.internal/
+
 # Private deployment guide (SSH, redeploy instructions)
 DEPLOYMENT.md
 

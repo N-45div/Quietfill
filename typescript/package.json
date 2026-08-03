@@ -1,9 +1,9 @@
 {
-  "name": "extension-scaffold",
+  "name": "quietfill-fcc-extension",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "TypeScript implementation of the Flare Confidential Compute extension scaffold",
+  "description": "Flare Confidential Compute extension for private FXRP block auctions",
   "scripts": {
     "build": "tsc",
     "start": "node dist/main.js",

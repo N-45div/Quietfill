@@ -1,129 +1,183 @@
-/**
- * ★ MAIN CUSTOMIZATION POINT: your extension's handlers.
- *
- * Mirrors go/internal/extension/extension.go. Each handler follows the same
- * 4-step pattern: decode, validate, execute, respond.
- *
- * Handler contract:
- *   (originalMessageHex) => [dataHexOrNull, status, errorOrNull]
- *   status 0 = error, 1 = success. See docs/extension-contract.md §4.6.
- *
- * The framework serializes handler calls, so plain module-level state is safe.
- */
+import {
+  getAddress,
+  keccak256,
+  zeroAddress,
+  zeroHash,
+  type Address,
+  type Hex,
+} from "viem";
 
 import { bytesToHex, hexToBytes } from "../base/encoding.js";
+import { NodeClient } from "../base/node.js";
 import type { Framework, HandlerResult } from "../base/types.js";
-
-import { decodeSayGoodbye } from "./abi.js";
 import {
-  OP_COMMAND_SAY_GOODBYE,
-  OP_COMMAND_SAY_HELLO,
-  OP_TYPE_GREETING,
+  decodeClearMessage,
+  decodePrivateBid,
+  encodeBidReceipt,
+  encodeClearResult,
+  type PrivateBid,
+} from "./abi.js";
+import {
+  OP_COMMAND_CLEAR,
+  OP_COMMAND_PRIVATE_BID,
+  OP_TYPE_QUIETFILL,
 } from "./config.js";
 
-// --- Extension state ---------------------------------------------------------
-// Serialized by the framework; no locking needed here.
-let greetingCount = 0;
-let lastGreeting = "";
-let farewellCount = 0;
-let lastFarewell = "";
+interface Decryptor {
+  decrypt(ciphertext: Uint8Array): Promise<Uint8Array>;
+}
 
-/** Reset all state. Used by tests; not part of the wire contract. */
+interface StoredBid extends PrivateBid {
+  commitment: Hex;
+}
+
+const auctions = new Map<string, Map<string, StoredBid>>();
+let decryptor: Decryptor = new NodeClient(process.env.SIGN_PORT ?? "9090");
+
+export function setDecryptorForTests(next: Decryptor): void {
+  decryptor = next;
+}
+
 export function resetState(): void {
-  greetingCount = 0;
-  lastGreeting = "";
-  farewellCount = 0;
-  lastFarewell = "";
+  auctions.clear();
 }
 
-/** Wire handlers to (opType, opCommand) pairs. */
 export function register(framework: Framework): void {
-  framework.handle(OP_TYPE_GREETING, OP_COMMAND_SAY_HELLO, handleSayHello);
-  framework.handle(OP_TYPE_GREETING, OP_COMMAND_SAY_GOODBYE, handleSayGoodbye);
+  framework.handle(OP_TYPE_QUIETFILL, OP_COMMAND_PRIVATE_BID, handlePrivateBid);
+  framework.handle(OP_TYPE_QUIETFILL, OP_COMMAND_CLEAR, handleClear);
 }
 
-/** Snapshot returned by GET /state. Mirrors the Go State struct. */
 export function reportState(): unknown {
+  let privateBidCount = 0;
+  for (const bids of auctions.values()) privateBidCount += bids.size;
   return {
-    greetingCount,
-    lastGreeting,
-    farewellCount,
-    lastFarewell,
+    auctionsTracked: auctions.size,
+    privateBidCount,
+    pricesExposed: false,
   };
 }
 
-/** GREETING/SAY_HELLO — JSON payload {"name": "..."}. */
-export function handleSayHello(msg: string): HandlerResult {
-  // 1. Decode
-  let raw: Uint8Array;
+export async function handlePrivateBid(ciphertextHex: string): Promise<HandlerResult> {
+  let ciphertext: Uint8Array;
   try {
-    raw = hexToBytes(msg);
-  } catch (e) {
-    return [null, 0, `decoding request: invalid hex: ${String(e)}`];
+    ciphertext = hexToBytes(ciphertextHex);
+  } catch (error) {
+    return failure(`invalid ciphertext: ${errorMessage(error)}`);
   }
+  if (ciphertext.length === 0) return failure("ciphertext must not be empty");
 
-  let req: unknown;
+  let plaintext: Uint8Array;
   try {
-    req = JSON.parse(Buffer.from(raw).toString("utf-8"));
-  } catch (e) {
-    return [null, 0, `decoding request: ${String(e)}`];
+    plaintext = await decryptor.decrypt(ciphertext);
+  } catch (error) {
+    return failure(`decryption failed: ${errorMessage(error)}`);
   }
 
-  if (typeof req !== "object" || req === null || Array.isArray(req)) {
-    return [null, 0, "decoding request: expected a JSON object"];
+  let bid: PrivateBid;
+  try {
+    bid = decodePrivateBid(bytesToHex(plaintext) as Hex);
+  } catch (error) {
+    return failure(`decoding private bid: ${errorMessage(error)}`);
   }
 
-  // Match Go's DisallowUnknownFields.
-  const unknown = Object.keys(req).filter((k) => k !== "name").sort();
-  if (unknown.length > 0) {
-    return [null, 0, `decoding request: unknown field "${unknown[0]}"`];
+  const validationError = validateBid(bid);
+  if (validationError) return failure(validationError);
+
+  const auctionKey = keyForAuction(bid.contractAddr, bid.auctionId);
+  const bidderKey = bid.bidder.toLowerCase();
+  const bids = auctions.get(auctionKey) ?? new Map<string, StoredBid>();
+  const previous = bids.get(bidderKey);
+  if (previous && bid.nonce <= previous.nonce) {
+    return failure("bid nonce must increase");
   }
 
-  // 2. Validate
-  const name = (req as { name?: unknown }).name;
-  if (typeof name !== "string" || name === "") {
-    return [null, 0, "name must not be empty"];
-  }
+  const commitment = keccak256(bytesToHex(plaintext) as Hex);
+  bids.set(bidderKey, { ...bid, commitment });
+  auctions.set(auctionKey, bids);
 
-  // 3. Execute
-  greetingCount++;
-  const greeting = `Hello, ${name}! Welcome to Flare Confidential Compute.`;
-  lastGreeting = greeting;
-
-  // 4. Respond
-  const resp = { greeting, greetingNumber: greetingCount };
-  return [bytesToHex(Buffer.from(JSON.stringify(resp), "utf-8")), 1, null];
+  return success(
+    encodeBidReceipt(
+      bid.contractAddr,
+      bid.auctionId,
+      bid.bidder,
+      bid.nonce,
+      commitment,
+    ),
+  );
 }
 
-/** GREETING/SAY_GOODBYE — ABI-encoded (string name, string reason). */
-export function handleSayGoodbye(msg: string): HandlerResult {
-  // 1. Decode
-  let hex: string;
+export function handleClear(messageHex: string): HandlerResult {
+  let message;
   try {
-    // Normalize through hexToBytes so malformed input fails here, not in viem.
-    hex = bytesToHex(hexToBytes(msg));
-  } catch (e) {
-    return [null, 0, `decoding request: invalid hex: ${String(e)}`];
+    message = decodeClearMessage(messageHex as Hex);
+  } catch (error) {
+    return failure(`decoding clear request: ${errorMessage(error)}`);
   }
 
-  let decoded: { name: string; reason: string };
+  if (message.auctionId <= 0n) return failure("auctionId must be positive");
+  if (message.contractAddr === zeroAddress) return failure("contractAddr must not be zero");
+  if (message.floorPriceWei <= 0n) return failure("floor price must be positive");
+  if (message.ceilingPriceWei < message.floorPriceWei) {
+    return failure("ceiling price must be at least floor price");
+  }
+
+  const bids = auctions.get(keyForAuction(message.contractAddr, message.auctionId));
+  const submitted = bids?.size ?? 0;
+  const eligible = [...(bids?.values() ?? [])].filter(
+    (bid) =>
+      bid.unitPriceWei >= message.floorPriceWei &&
+      bid.unitPriceWei <= message.ceilingPriceWei,
+  );
+
+  eligible.sort((left, right) => {
+    if (left.unitPriceWei > right.unitPriceWei) return -1;
+    if (left.unitPriceWei < right.unitPriceWei) return 1;
+    return left.bidder.toLowerCase().localeCompare(right.bidder.toLowerCase());
+  });
+
+  const winner = eligible[0];
+  return success(
+    encodeClearResult({
+      contractAddr: message.contractAddr,
+      auctionId: message.auctionId,
+      winner: winner?.bidder ?? zeroAddress,
+      unitPriceWei: winner?.unitPriceWei ?? 0n,
+      winningNonce: winner?.nonce ?? 0n,
+      winningCommitment: winner?.commitment ?? zeroHash,
+      submittedBidCount: BigInt(submitted),
+      eligibleBidCount: BigInt(eligible.length),
+    }),
+  );
+}
+
+function validateBid(bid: PrivateBid): string | null {
   try {
-    decoded = decodeSayGoodbye(hex as `0x${string}`);
-  } catch (e) {
-    return [null, 0, `decoding request: ${e instanceof Error ? e.message : String(e)}`];
+    bid.bidder = getAddress(bid.bidder);
+    bid.contractAddr = getAddress(bid.contractAddr);
+  } catch (error) {
+    return `invalid address: ${errorMessage(error)}`;
   }
+  if (bid.bidder === zeroAddress) return "bidder must not be zero";
+  if (bid.contractAddr === zeroAddress) return "contractAddr must not be zero";
+  if (bid.auctionId <= 0n) return "auctionId must be positive";
+  if (bid.nonce <= 0n) return "nonce must be positive";
+  if (bid.unitPriceWei <= 0n) return "unit price must be positive";
+  if (bid.salt === zeroHash) return "salt must not be zero";
+  return null;
+}
 
-  // 2. Validate
-  if (!decoded.name) {
-    return [null, 0, "name must not be empty"];
-  }
+function keyForAuction(contractAddr: Address, auctionId: bigint): string {
+  return `${contractAddr.toLowerCase()}:${auctionId}`;
+}
 
-  // 3. Execute
-  farewellCount++;
-  const farewell = `Goodbye, ${decoded.name}! Reason: ${decoded.reason}`;
-  lastFarewell = farewell;
+function success(data: Hex): HandlerResult {
+  return [data, 1, null];
+}
 
-  // 4. Respond
-  const resp = { farewell, farewellNumber: farewellCount };
-  return [bytesToHex(Buffer.from(JSON.stringify(resp), "utf-8")), 1, null];
+function failure(message: string): HandlerResult {
+  return [null, 0, message];
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
