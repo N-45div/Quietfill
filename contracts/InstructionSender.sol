@@ -13,8 +13,11 @@ import {ITeeMachineRegistry} from "./interfaces/ITeeMachineRegistry.sol";
 /// clears, relay results, and recover funds. There are no admin keys.
 contract QuietFillAuction {
     bytes32 public constant OP_TYPE_QUIETFILL = bytes32("QUIETFILL");
-    bytes32 public constant OP_COMMAND_PRIVATE_BID = bytes32("PRIVATE_BID");
-    bytes32 public constant OP_COMMAND_CLEAR = bytes32("CLEAR");
+    // Command names are deliberately extension-prefixed: generic single words
+    // (and anything F_-prefixed) can collide with FCC system commands and
+    // silently never relay on Coston2.
+    bytes32 public constant OP_COMMAND_PRIVATE_BID = bytes32("QF_PRIVATE_BID");
+    bytes32 public constant OP_COMMAND_CLEAR = bytes32("QF_CLEAR");
 
     bytes32 private constant TEE_ACTION_RESULT = bytes32("TEE_ACTION_RESULT");
     bytes32 private constant THRESHOLD_TAG_HASH = keccak256("threshold");

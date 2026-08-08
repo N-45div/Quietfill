@@ -181,7 +181,7 @@ contract QuietFillAuctionTest {
         _submitBid(auctionId, bidder);
         require(quietFill.quoteEscrow(auctionId, bidder) == escrow, "replacement re-escrowed");
         require(usdt0.balanceOf(address(quietFill)) == escrow, "unexpected token balance");
-        require(extensionRegistry.lastOpCommand() == bytes32("PRIVATE_BID"), "wrong FCC command");
+        require(extensionRegistry.lastOpCommand() == bytes32("QF_PRIVATE_BID"), "wrong FCC command");
     }
 
     function testForgedTeeSignatureCannotSettle() public {
@@ -300,7 +300,7 @@ contract QuietFillAuctionTest {
         QuietFillAuction.Auction memory auction = quietFill.getAuction(auctionId);
         vm.warp(auction.bidDeadline);
         quietFill.requestClear(auctionId);
-        require(extensionRegistry.lastOpCommand() == bytes32("CLEAR"), "wrong clear command");
+        require(extensionRegistry.lastOpCommand() == bytes32("QF_CLEAR"), "wrong clear command");
     }
 
     function _readyAuction() private returns (uint256 auctionId) {

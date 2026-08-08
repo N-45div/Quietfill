@@ -23,11 +23,17 @@ fi
 
 # --- proxy config, generated from env so no credentials live in the repo ---
 mkdir -p /app/proxy/config
+# Field set follows tee-proxy's config.example.toml at the pinned commit
+# (0c6d016): newer fields are stated explicitly so none land on a zero value.
+# machine_path_manager stays zero (direct-signature governance, [governance]
+# unset) and attestation stays off (SIMULATED_TEE deployment).
 cat > /app/proxy/config/config.toml <<EOF
 redis_port = "127.0.0.1:6379"
 private_key_variable = "PROXY_PRIVATE_KEY"
 initial_signing_policy_offset = 2
 signing_policy_fetch_interval = "20s"
+machine_path_list_fetch_interval = "10m"
+db_sync_max_sleep_time = "10m"
 
 chain_id = ${CHAIN_ID}
 
@@ -39,22 +45,48 @@ username = "${DB_USER}"
 password = "${DB_PASSWORD}"
 log_queries = false
 
+[logging]
+level = "${LOG_LEVEL:-INFO}"
+file = ""
+max_file_size = 0
+console = true
+
 [addresses]
 flare_systems_manager = "${FLARE_SYSTEMS_MANAGER:-0xA90Db6D10F856799b10ef2A77EBCbF460aC71e52}"
 relay = "${RELAY:-0xa10B672D1c62e5457b17af63d4302add6A99d7dE}"
 voter_registry = "${VOTER_REGISTRY:-0x6a0AF07b7972177B176d3D422555cbc98DfDe914}"
+machine_path_manager = "0x0000000000000000000000000000000000000000"
 
 [ports]
 internal = "6663"
 external = "6664"
 
 [info_timing]
+initial_timeout = "5m"
 cycle_internal = "10s"
 cycle_queue_response_wait = "2s"
 
 [voting]
-proposal_expiration = "12s"
+proposal_expiration = "120s"
 max_pending_request = 10000
+history_size = 3
+finalized_buffer_size = 10
+max_provider_vote = 0.025
+
+[storage]
+action_ttl = "336h"
+result_ttl = "336h"
+submit_result_ttl = "30m"
+backup_ttl = "192h"
+
+[direct]
+enable = false
+
+[attestation]
+enable = false
+
+[metrics]
+enable = false
 EOF
 echo "boot: proxy config generated (db ${DB_HOST}:${DB_PORT}, chain ${CHAIN_ID})"
 

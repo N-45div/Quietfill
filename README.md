@@ -63,7 +63,7 @@ sequenceDiagram
 
 What stays public — honestly: *who* escrowed into an auction and how many times they repriced is visible from ERC-20 transfers and events, as on any public chain. QuietFill hides prices and intent, not participation; settlement is fully auditable by design.
 
-The signature format deliberately mirrors the scaffold's pinned `tee-node` revision (`31fc839ae6d2`) rather than a generic `signMessage`; see [CLAUDE.md](CLAUDE.md) for the exact derivation.
+The signature format deliberately mirrors the scaffold's pinned `tee-node` revision (`v0.0.23`, paired with the matching `tee-proxy` commit) rather than a generic `signMessage`; see [CLAUDE.md](CLAUDE.md) for the exact derivation.
 
 ## Repository layout
 

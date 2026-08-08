@@ -19,8 +19,8 @@ Use Node 24. Do not add secrets, private keys, indexer credentials, deployment s
 
 The TypeScript FCC extension implements:
 
-- `QUIETFILL / PRIVATE_BID`: decode the contract-authenticated envelope `(auctionId, bidder, ciphertext)`, decrypt the ECIES ciphertext, ABI-decode the private bid, reject any plaintext whose bidder or auction does not match the envelope, enforce monotonic bidder nonces, and store only the latest bid per bidder.
-- `QUIETFILL / CLEAR`: select the highest bid inside the immutable on-chain floor/ceiling collar, with deterministic address tie-breaking.
+- `QUIETFILL / QF_PRIVATE_BID`: decode the contract-authenticated envelope `(auctionId, bidder, ciphertext)`, decrypt the ECIES ciphertext, ABI-decode the private bid, reject any plaintext whose bidder or auction does not match the envelope, enforce monotonic bidder nonces, and store only the latest bid per bidder.
+- `QUIETFILL / QF_CLEAR`: select the highest bid inside the immutable on-chain floor/ceiling collar, with deterministic address tie-breaking.
 - Price-free public receipts and state. Bid prices must never be exposed by `/state`, logs, or the bid receipt.
 
 The Solidity contract in `contracts/InstructionSender.sol` implements:
@@ -54,8 +54,8 @@ The Go tooling in `tools/` deploys QuietFillAuction (with verified escrow-token 
 
 The contract deliberately mirrors the versions pinned by the scaffold:
 
-- `tee-node`: `31fc839ae6d2`
-- `go-flare-common`: `c573c79c0924`
+- `tee-node`: `v0.0.23` (paired with `tee-proxy` commit `0c6d016b0994` — the alignment confirmed relaying on Coston2; `ActionResult.Hash()` and the ECIES scheme are byte-identical to the original `31fc839ae6d2` derivation)
+- `go-flare-common`: `09a10067e6a4` (`pkg/signing` byte-identical to `c573c79c0924`)
 - Domain: `bytes32("TEE_ACTION_RESULT")`
 - Action result hash: `keccak256(keccak256(data) || instructionId || keccak256("threshold") || uint8(1))`
 - Payload hash: `keccak256(abi.encode(domain, block.chainid, actionResultHash))`

@@ -5,13 +5,14 @@
 #
 #   docker build -f deploy/render/Dockerfile -t quietfill-fcc .
 #
-# Pins mirror the scaffold: tee-node at the tools/go.mod pseudo-version's
-# commit, tee-proxy at v0.0.18 (proxy/Dockerfile).
+# Pins mirror the scaffold: tee-node v0.0.23 + tee-proxy at commit
+# 0c6d016b0994 — the aligned pair confirmed relaying on Coston2.
 
 # --- tee-node server binary --------------------------------------------------
 FROM golang:1.25.1-trixie AS teenode
 
-ARG TEE_NODE_REF=31fc839ae6d2
+ARG TEE_NODE_REF=v0.0.23
+ENV GOTOOLCHAIN=auto
 WORKDIR /build
 RUN git clone --filter=blob:none https://github.com/flare-foundation/tee-node.git tee-node && \
     cd tee-node && git checkout "${TEE_NODE_REF}"
@@ -25,9 +26,13 @@ RUN cp assets/google_confidential_space_root.crt /out/google_confidential_space_
 FROM golang:1.25.1-alpine AS teeproxy
 
 RUN apk add --no-cache git
-ARG TEE_PROXY_VERSION=v0.0.18
+ARG TEE_PROXY_VERSION=v0.0.21-0.20260729123751-0c6d016b0994
+ENV GOTOOLCHAIN=auto
 WORKDIR /build
-RUN git clone --depth 1 --branch ${TEE_PROXY_VERSION} https://github.com/flare-foundation/tee-proxy.git
+RUN git clone --filter=blob:none https://github.com/flare-foundation/tee-proxy.git tee-proxy && \
+    cd tee-proxy && \
+    REF="$(echo "${TEE_PROXY_VERSION}" | grep -oE '[0-9a-f]{12}$' || echo "${TEE_PROXY_VERSION}")" && \
+    git checkout "${REF}"
 WORKDIR /build/tee-proxy
 RUN go mod download
 RUN CGO_ENABLED=0 GOOS=linux go build -a -o /out/main ./cmd/proxy

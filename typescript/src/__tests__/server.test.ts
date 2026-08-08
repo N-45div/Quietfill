@@ -61,14 +61,14 @@ describe("QuietFill wire server", () => {
     const [status, body] = await server.handleRequest(
       "POST",
       "/action",
-      action("PRIVATE_BID", hexToBytes(envelope)),
+      action("QF_PRIVATE_BID", hexToBytes(envelope)),
     );
     const result = body as Record<string, unknown>;
 
     expect(status).toBe(200);
     expect(result.status).toBe(1);
     expect(result.opType).toBe(stringToBytes32Hex("QUIETFILL"));
-    expect(result.opCommand).toBe(stringToBytes32Hex("PRIVATE_BID"));
+    expect(result.opCommand).toBe(stringToBytes32Hex("QF_PRIVATE_BID"));
     expect(result.submissionTag).toBe("submit");
     expect(result.version).toBe(VERSION);
     expect(Object.keys(result).sort()).toEqual([
