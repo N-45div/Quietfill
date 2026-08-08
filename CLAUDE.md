@@ -63,6 +63,16 @@ The contract deliberately mirrors the versions pinned by the scaffold:
 
 Do not replace this with a generic `signMessage(data)` assumption or accept an unsigned proxy response.
 
+## Hosting
+
+The chosen deployment target is Render's free tier (no card): one Docker web
+service from `deploy/render/Dockerfile` (redis + tee-proxy + tee-node +
+extension + CORS edge on localhost, `SIMULATED_TEE=true`) plus a free static
+site for `web/`, both declared in `render.yaml`.
+`.github/workflows/keepalive.yml` pings `/info` every 10 minutes so the free
+instance never idles out; the `PROXY_URL` repo variable must point at the
+Render URL. Runbook: `deploy/render/README.md`.
+
 ## Resume Work in This Order
 
 Everything below assumes the codebase state after the tooling and web-app commits: bindings generate via `./scripts/generate-bindings.sh` (forge + jq + Go, or the Docker fallback in the script header of the same name), `tools/` deploys and drives QuietFillAuction end to end, and `web/` is the seller/dealer app with tee-node-compatible in-browser ECIES (cross-checked against the pinned revision in both directions).

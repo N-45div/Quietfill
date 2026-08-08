@@ -85,6 +85,15 @@ cd typescript && npm ci && npm test           # 38 extension tests
 cd ../web && npm ci && npm test               # 6 crypto tests, incl. a tee-node ECIES fixture
 ```
 
+## Deploy it — free
+
+The entire stack — FCC backend (redis + tee-proxy + tee-node + extension in one
+container) and the web app — deploys on Render's free tier from
+[render.yaml](render.yaml), with a GitHub Actions pinger that keeps the free
+instance from sleeping. The runbook is
+[deploy/render/README.md](deploy/render/README.md); the only inputs are
+faucet-funded Coston2 keys and indexer credentials from the Flare team.
+
 ## Status
 
 - ✅ Auction contract with TEE-signature settlement — tested

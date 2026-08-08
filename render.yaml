@@ -1,0 +1,45 @@
+# Render Blueprint: the whole QuietFill deployment on the free tier.
+#   Dashboard -> New -> Blueprint -> point at this repo.
+# See deploy/render/README.md for the full runbook and the env vars you must
+# fill in (indexer DB credentials, proxy key, extension id).
+services:
+  # FCC backend: redis + tee-proxy + tee-node + extension + CORS edge in one
+  # container. Free instances sleep after 15 idle minutes - the keep-alive
+  # workflow in .github/workflows/keepalive.yml prevents that.
+  - type: web
+    name: quietfill-fcc
+    runtime: docker
+    plan: free
+    dockerfilePath: ./deploy/render/Dockerfile
+    dockerContext: .
+    healthCheckPath: /info
+    autoDeploy: false
+    envVars:
+      - key: PROXY_PRIVATE_KEY
+        sync: false
+      - key: DB_HOST
+        sync: false
+      - key: DB_NAME
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: EXTENSION_ID
+        sync: false
+      - key: INITIAL_OWNER
+        sync: false
+      - key: CHAIN_ID
+        value: "114"
+      - key: CHAIN_URL
+        value: https://coston2-api.flare.network/ext/C/rpc
+      - key: SIMULATED_TEE
+        value: "true"
+
+  # The web app: plain static site, free.
+  - type: web
+    name: quietfill-web
+    runtime: static
+    buildCommand: cd web && npm ci && npm run build
+    staticPublishPath: web/dist
+    autoDeploy: true
