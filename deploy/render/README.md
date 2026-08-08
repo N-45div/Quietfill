@@ -13,8 +13,8 @@ always-awake service.
 
 | Thing | Where |
 |---|---|
-| Coston2 keys (deployer + proxy), funded | [Coston2 faucet](https://faucet.flare.network/coston2) |
-| Indexer DB credentials for the proxy | Ask the Flare team (hackathon Discord/Telegram) |
+| Coston2 keys (deployer + proxy), funded with C2FLR | [faucet.flare.network/coston2](https://faucet.flare.network/coston2) |
+| Indexer DB credentials for the proxy | Pinned message in the hackathon channel (user `hackathon_user_57`; host/name are prefilled in `render.yaml`). The indexer-reader creds in old docs are dead. |
 | Real Coston2 FXRP + USDT0 addresses | Official Flare sources — `deploy-contract` verifies them |
 | Render account | [render.com](https://render.com) — free, no card |
 | Go 1.25+, jq, Foundry on your machine | `winget install GoLang.Go jqlang.jq` — for the one-time on-chain steps |
@@ -82,6 +82,36 @@ auction with MetaMask on Coston2. Or drive one end-to-end from the CLI:
 ```bash
 EXT_PROXY_URL=https://quietfill-fcc.onrender.com ./scripts/test.sh
 ```
+
+## Coston2 FCC redeploy notes (July 2026)
+
+Coston2 FCC was redeployed; most register-tee failures in the wild are stale
+stacks talking to the dead deployment.
+
+- The **live FlareTeeManager is `0x1a9C4A0f9D76c0b1D91d22E24E573a9b377618aE`**
+  — `config/coston2/deployed-addresses.json` in this repo already carries it.
+  If you see `FunctionNotFound` or "only reward offers manager", something is
+  still pointed at the old `0x004224fa…5d41F`.
+- Registrations from before the redeploy are gone: run `pre-build.sh` for a
+  fresh `EXTENSION_ID` before anything else.
+- `post-build.sh` now registers with `-command rRap` (capital R = fresh
+  challenge) by default — also the right call after any TEE identity rotation.
+- tee-node **v0.0.22+** is mandatory on the network; this repo pins v0.0.23
+  paired with the matching tee-proxy commit.
+- Check your machine's state yourself in 30 seconds:
+
+```bash
+cast call 0x1a9C4A0f9D76c0b1D91d22E24E573a9b377618aE \
+  "getTeeMachine(address)((address,address,string))" <teeId>   # URL on-chain = URL you serve?
+cast call 0x1a9C4A0f9D76c0b1D91d22E24E573a9b377618aE \
+  "getTeeMachineStatus(address)(uint8)" <teeId>                # 1 INITIALIZED, 2 PRODUCTION
+```
+
+- A registered URL must be **stable** — quick tunnels rot on restart and leave
+  machines stuck at INITIALIZED. The Render URL never changes, which is half
+  the reason this deployment exists.
+- `SIMULATED_TEE=true` on Coston2 is fine for judging (confirmed by the
+  organizers); GCP Confidential Space is not required.
 
 ## Free-tier realities
 

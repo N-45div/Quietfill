@@ -145,12 +145,15 @@ log "Simulated TEE: $SIMULATED_TEE"
 
 # --- Step 3: Register TEE on-chain ---
 step 3 "Register TEE machine"
+# rRap (capital R) forces a fresh challenge — required after the Coston2 FCC
+# redeploy and after any TEE identity rotation; plain rap reuses stale state.
 go run ./cmd/register-tee \
     -a "$ADDRESSES_FILE" \
     -c "$CHAIN_URL" \
     -p "$EXT_PROXY_URL" \
     -h "${EXT_PROXY_HOST_URL:-$EXT_PROXY_URL}" \
     -ep "$NORMAL_PROXY_URL" \
+    -command "${REGISTER_TEE_COMMAND:-rRap}" \
     -state "$PROJECT_DIR/config/register-tee.state" \
     || die "Register TEE failed"
 

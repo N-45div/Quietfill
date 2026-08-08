@@ -17,10 +17,14 @@ services:
     envVars:
       - key: PROXY_PRIVATE_KEY
         sync: false
+      # Coston2 indexer DB. Host/name are public infrastructure; the
+      # user/password pair comes from the hackathon channel's pinned message.
       - key: DB_HOST
-        sync: false
+        value: "34.38.42.208"
+      - key: DB_PORT
+        value: "3306"
       - key: DB_NAME
-        sync: false
+        value: flare_ftso_indexer
       - key: DB_USER
         sync: false
       - key: DB_PASSWORD
