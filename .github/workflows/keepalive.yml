@@ -1,9 +1,16 @@
-# Pings the Render free instance so it never hits the 15-minute idle
-# spin-down. Defaults to the deployed backend; override by setting a PROXY_URL
-# repository variable (Settings -> Secrets and variables -> Actions -> Variables).
+# Keeps the Render free instance from hitting its 15-minute idle spin-down.
 #
-# Note: GitHub pauses scheduled workflows after 60 days without repo activity;
-# any push resets the clock.
+# This is the BACKUP layer. GitHub's scheduled runs are queued on shared
+# infrastructure and are regularly delayed — sometimes past the idle window —
+# so an external monitor (UptimeRobot or similar, 5-minute interval) should be
+# the primary pinger. See deploy/render/README.md.
+#
+# To tolerate that jitter, each run pings for ~14 minutes while the schedule
+# fires every 10, so consecutive runs overlap and a single skipped run still
+# leaves no gap longer than the idle timeout. Public repos get unlimited
+# Actions minutes, so the long job costs nothing.
+#
+# Note: GitHub pauses scheduled workflows after 60 days without repo activity.
 name: keep-proxy-awake
 
 on:
@@ -14,11 +21,17 @@ on:
 jobs:
   ping:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - name: Ping proxy /info
+      - name: Ping proxy /info for ~14 minutes
         env:
           PROXY_URL: ${{ vars.PROXY_URL || 'https://quietfill-fcc.onrender.com' }}
         run: |
-          curl -sf --max-time 90 "$PROXY_URL/info" > /dev/null \
-            && echo "proxy awake: $PROXY_URL" \
-            || echo "ping failed (cold start or proxy down) - the request itself still triggers wake-up"
+          for i in $(seq 1 14); do
+            if curl -sf --max-time 90 "$PROXY_URL/info" > /dev/null; then
+              echo "$(date -u +%H:%M:%S) ping $i ok"
+            else
+              echo "$(date -u +%H:%M:%S) ping $i failed (cold start or down) — the request still triggers wake-up"
+            fi
+            [ "$i" -lt 14 ] && sleep 57
+          done

@@ -67,11 +67,35 @@ three registration commands individually (`allow-tee-version`,
 `set-governance` via post-build, `register-tee` **without** `-l`) — see the
 root README's "Running Individual Steps".
 
-## 4 — Keep it awake
+## 4 — Keep it awake (and why it matters more than uptime)
 
-Repo → Settings → Secrets and variables → Actions → **Variables** → add
-`PROXY_URL = https://quietfill-fcc.onrender.com`. The scheduled workflow does
-the rest. (Alternative: a free UptimeRobot monitor on `/info`.)
+A free instance sleeps after 15 idle minutes. Waking is not just a slow first
+request: **tee-node generates a fresh identity on every start**, so a restarted
+proxy serves a TEE the registry no longer pins, and auctions created in that
+state can never be bid on. Keeping it warm is really about keeping the TEE
+identity stable.
+
+Use two layers:
+
+1. **An external monitor as the primary** — [UptimeRobot](https://uptimerobot.com)
+   free tier: an HTTP(s) monitor on `https://<your-app>.onrender.com/info` at a
+   5-minute interval. No card, and it pings on a dedicated schedule.
+2. **The bundled workflow as backup** —
+   [`.github/workflows/keepalive.yml`](../../.github/workflows/keepalive.yml)
+   already defaults to the deployed URL. It exists because GitHub's scheduled
+   runs are queued on shared infrastructure and are regularly delayed past the
+   idle window, so each run pings for ~14 minutes while the schedule fires every
+   10, leaving overlapping coverage.
+
+Neither prevents a Render-side restart or redeploy. Before any demo or judging
+session, run the health check — it catches identity drift in seconds:
+
+```bash
+node scripts/check-tee.mjs
+```
+
+If it fails, re-run `post-build.sh` and retire the stale machine with `pause()`
+as the output instructs.
 
 ## 5 — Point the app at it
 
