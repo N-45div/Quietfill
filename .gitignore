@@ -56,6 +56,10 @@ python/.pytest_cache/
 
 docs/superpowers
 
+# Recorded demo footage — upload to YouTube rather than bloating the repo.
+demo/*.mp4
+demo/*.webm
+
 notes/
 
 # Private hackathon strategy, research, and milestone tracking.
