@@ -18,12 +18,17 @@ export interface AppContext {
 
 const stored = (key: string, fallback = "") => localStorage.getItem(key) ?? fallback;
 
+/** The live Coston2 deployment, so the hosted app works with no setup. */
+const DEFAULT_CONTRACT = "0x155f065A741b1CBe2A57A5CE28A75a3727ffEbDD";
+/** In dev the vite server proxies /fcc to a local proxy; in production hit the hosted one. */
+const DEFAULT_PROXY = import.meta.env.DEV ? "/fcc" : "https://quietfill-fcc.onrender.com";
+
 export function App() {
   const route = useRoute();
   const [account, setAccount] = useState<Address | null>(null);
   const [chainId, setChainId] = useState<number | null>(null);
-  const [contract, setContract] = useState(stored("quietfill.contract"));
-  const [proxyUrl, setProxyUrl] = useState(stored("quietfill.proxy", "/fcc"));
+  const [contract, setContract] = useState(stored("quietfill.contract", DEFAULT_CONTRACT));
+  const [proxyUrl, setProxyUrl] = useState(stored("quietfill.proxy", DEFAULT_PROXY));
   const [lines, setLines] = useState<LogLine[]>([]);
   const [error, setError] = useState("");
 
