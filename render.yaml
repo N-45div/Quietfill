@@ -24,7 +24,7 @@ services:
       - key: DB_PORT
         value: "3306"
       - key: DB_NAME
-        value: flare_ftso_indexer
+        value: indexer
       - key: DB_USER
         sync: false
       - key: DB_PASSWORD
