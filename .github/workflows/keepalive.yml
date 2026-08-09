@@ -1,7 +1,6 @@
 # Pings the Render free instance so it never hits the 15-minute idle
-# spin-down. Set the PROXY_URL repository variable (Settings -> Secrets and
-# variables -> Actions -> Variables) to the Render backend URL, e.g.
-# https://quietfill-fcc.onrender.com
+# spin-down. Defaults to the deployed backend; override by setting a PROXY_URL
+# repository variable (Settings -> Secrets and variables -> Actions -> Variables).
 #
 # Note: GitHub pauses scheduled workflows after 60 days without repo activity;
 # any push resets the clock.
@@ -17,11 +16,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Ping proxy /info
+        env:
+          PROXY_URL: ${{ vars.PROXY_URL || 'https://quietfill-fcc.onrender.com' }}
         run: |
-          if [ -z "${{ vars.PROXY_URL }}" ]; then
-            echo "PROXY_URL repo variable not set - skipping"
-            exit 0
-          fi
-          curl -sf --max-time 90 "${{ vars.PROXY_URL }}/info" > /dev/null \
-            && echo "proxy awake" \
+          curl -sf --max-time 90 "$PROXY_URL/info" > /dev/null \
+            && echo "proxy awake: $PROXY_URL" \
             || echo "ping failed (cold start or proxy down) - the request itself still triggers wake-up"
