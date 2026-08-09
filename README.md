@@ -85,6 +85,19 @@ cd typescript && npm ci && npm test           # 38 extension tests
 cd ../web && npm ci && npm test               # 6 crypto tests, incl. a tee-node ECIES fixture
 ```
 
+## Live on Coston2
+
+| | |
+|---|---|
+| `QuietFillAuction` | [`0x155f065A741b1CBe2A57A5CE28A75a3727ffEbDD`](https://coston2-explorer.flare.network/address/0x155f065A741b1CBe2A57A5CE28A75a3727ffEbDD) |
+| FCC extension ID | `66046` (`0x101fe`) |
+| Base token (FXRP) | [`0x0b6A3645c240605887a5532109323A3E12273dc7`](https://coston2-explorer.flare.network/address/0x0b6A3645c240605887a5532109323A3E12273dc7) — FTestXRP, 6 decimals |
+| Quote token (USDT0) | [`0xC1A5B41512496B80903D1f32d6dEa3a73212E71F`](https://coston2-explorer.flare.network/address/0xC1A5B41512496B80903D1f32d6dEa3a73212E71F) — USD₮0, 6 decimals |
+| TEE machine registry | `0x1a9C4A0f9D76c0b1D91d22E24E573a9b377618aE` (live FlareTeeManager) |
+
+The deployed contract reports `opType = QUIETFILL`, `opCommand = QF_PRIVATE_BID / QF_CLEAR`,
+and its extension ID is cached on-chain, so the FCC instruction path is wired end to end.
+
 ## Deploy it — free
 
 The entire stack — FCC backend (redis + tee-proxy + tee-node + extension in one
