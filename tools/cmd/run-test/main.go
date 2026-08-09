@@ -142,13 +142,21 @@ func main() {
 	}
 
 	// --- Step 0: extension ID must be cached on the contract ---
-	logger.Infof("Setting extension ID on QuietFillAuction...")
-	if err := instrutils.SetExtensionId(s, senderAddr); err != nil {
-		if strings.Contains(err.Error(), "already set") || strings.Contains(err.Error(), "ExtensionIdAlreadySet") {
-			logger.Infof("Extension ID already set on contract, continuing")
-		} else {
-			fccutils.FatalWithCause(errors.Errorf(
-				"setExtensionId failed — is the extension registered? Check that pre-build.sh completed. Error: %s", err))
+	// Read it first: the setter reverts with ExtensionIdAlreadySet (0x88f9fe3d)
+	// on a second call, and a bare selector is not matchable as text.
+	if cached, err := sender.ExtensionId(&bind.CallOpts{}); err == nil && cached.Sign() > 0 {
+		logger.Infof("Extension ID already cached on contract: %s", cached)
+	} else {
+		logger.Infof("Setting extension ID on QuietFillAuction...")
+		if err := instrutils.SetExtensionId(s, senderAddr); err != nil {
+			if strings.Contains(err.Error(), "already set") ||
+				strings.Contains(err.Error(), "ExtensionIdAlreadySet") ||
+				strings.Contains(err.Error(), "0x88f9fe3d") {
+				logger.Infof("Extension ID already set on contract, continuing")
+			} else {
+				fccutils.FatalWithCause(errors.Errorf(
+					"setExtensionId failed — is the extension registered? Check that pre-build.sh completed. Error: %s", err))
+			}
 		}
 	}
 

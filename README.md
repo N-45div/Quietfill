@@ -87,16 +87,34 @@ cd ../web && npm ci && npm test               # 6 crypto tests, incl. a tee-node
 
 ## Live on Coston2
 
+**App: [quietfill-web.onrender.com](https://quietfill-web.onrender.com) · FCC proxy: [quietfill-fcc.onrender.com](https://quietfill-fcc.onrender.com/info)**
+
 | | |
 |---|---|
 | `QuietFillAuction` | [`0x155f065A741b1CBe2A57A5CE28A75a3727ffEbDD`](https://coston2-explorer.flare.network/address/0x155f065A741b1CBe2A57A5CE28A75a3727ffEbDD) |
 | FCC extension ID | `66046` (`0x101fe`) |
+| TEE machine | [`0x3febEa2C965e2ca63eeD84a10014f82E02585BCa`](https://coston2-systems-explorer.flare.network/tee/objects) — status **2 = PRODUCTION** |
 | Base token (FXRP) | [`0x0b6A3645c240605887a5532109323A3E12273dc7`](https://coston2-explorer.flare.network/address/0x0b6A3645c240605887a5532109323A3E12273dc7) — FTestXRP, 6 decimals |
 | Quote token (USDT0) | [`0xC1A5B41512496B80903D1f32d6dEa3a73212E71F`](https://coston2-explorer.flare.network/address/0xC1A5B41512496B80903D1f32d6dEa3a73212E71F) — USD₮0, 6 decimals |
-| TEE machine registry | `0x1a9C4A0f9D76c0b1D91d22E24E573a9b377618aE` (live FlareTeeManager) |
+| TEE registry | `0x1a9C4A0f9D76c0b1D91d22E24E573a9b377618aE` (live FlareTeeManager) |
 
-The deployed contract reports `opType = QUIETFILL`, `opCommand = QF_PRIVATE_BID / QF_CLEAR`,
-and its extension ID is cached on-chain, so the FCC instruction path is wired end to end.
+### A real sealed-bid auction, settled on-chain
+
+Auction #1 ran end to end against the live stack: the bid was ECIES-encrypted to the
+registered TEE's key, decrypted only inside the enclave, cleared there, and settled by
+the contract verifying the TEE's chain-bound signature.
+
+| Step | Transaction |
+|---|---|
+| `createAuction` (1 FXRP, collar 1.0–2.0) | [`0x4ad4257d…ef874`](https://coston2-explorer.flare.network/tx/0x4ad4257d5c2c70f387e6092634771d4cd664030f6c61e81aaa4289f3669ef874) |
+| `submitPrivateBid` (305-byte ciphertext) | [`0x28bc46f3…e80755`](https://coston2-explorer.flare.network/tx/0x28bc46f377639c500a55a5dfd649d0300caea5dff6aeb2faeb83218146e80755) |
+| `requestClear` | [`0x811a2a9a…4ddc36`](https://coston2-explorer.flare.network/tx/0x811a2a9ac875e41a232ab736dc9d92fb0a8d7fe45f99dc009d801fc3974ddc36) |
+| `settleAuction` (TEE signature verified) | [`0x11e1af94…a894d9`](https://coston2-explorer.flare.network/tx/0x11e1af9403aa49063c86b406d62e0c4cf7cde73eabe33f8ecd2c3822b1a894d9) |
+
+FCC instruction IDs: bid `0xcbbec905…549db`, clear `0xe6626ee1…8257d4`. Clearing price
+1.5 USDT0/FXRP — and the losing-side prices never left the enclave.
+
+![Settled auction in the hosted app](docs/screenshots/hosted-settled.png)
 
 ## Deploy it — free
 
