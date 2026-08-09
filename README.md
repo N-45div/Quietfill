@@ -125,14 +125,10 @@ instance from sleeping. The runbook is
 [deploy/render/README.md](deploy/render/README.md); the only inputs are
 faucet-funded Coston2 keys and indexer credentials from the Flare team.
 
-## Status
-
-- ✅ Auction contract with TEE-signature settlement — tested
-- ✅ TypeScript FCC extension with authenticated bid envelopes — tested
-- ✅ Deployment tooling: verified Coston2 deploy + a runner that drives one real auction end to end
-- ✅ Seller/dealer web app — bid encryption byte-checked against the pinned tee-node revision
-- 🔜 Live Coston2 deployment with hosted FCC proxy
-
 ## Provenance
 
 This repository intentionally keeps the full history of Flare's official [`fce-extension-scaffold`](https://gitlab.com/flarenetwork/tee) — the FCC "Hello World" it grew from. Everything QuietFill starts at commit `d719b2e` (hackathon work). The scaffold's own README, with instructions for running extensions in Go/Python/TypeScript against local or Coston2 infrastructure, lives at [docs/scaffold-readme.md](docs/scaffold-readme.md).
+
+## License
+
+QuietFill's own work is [MIT](LICENSE). Scaffold-derived portions remain the copyright of their original authors — see the attribution note in the licence file.
