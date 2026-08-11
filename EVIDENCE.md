@@ -30,6 +30,27 @@ FCC instruction IDs (delivered through the public proxy to the enclave):
 - Bid: `0x2ee9bd87558f483ec3980edcc2ee847eb1d91d5fa76082e8fde2d11eeee5141d`
 - Clear: `0x520e8fe65c9d47695b8bfb7657ef5bd84a5b172cd2288d8a3466004517dbbc60`
 
+## The recorded demo (auction 4)
+
+The demo video drives the **hosted app** through its own complete auction, with
+every transaction signed for real against Coston2. That run is auction **4** on
+the same contract, cleared by TEE
+`0x49d6e7D40DbB56ffbb35C33C0FdFb6FE6dFc434C` (registered and PRODUCTION at
+recording time; since retired after a container restart rotated the enclave
+identity — see the note below). On-chain it reads `state = 3 (Settled)`,
+clearing price **1.05 USDT0/FXRP** inside an FTSO-derived collar of
+0.9869–1.0907.
+
+## A note on TEE identity
+
+tee-node holds its identity key in memory, so a container restart produces a new
+TEE address and orphans the previous registration. Each auction pins whichever
+machine the registry returned at creation time, and settlement verifies against
+*that* machine — so past auctions stay verifiable forever even after their TEE
+is retired. Operationally: after any restart, re-run `post-build.sh` and
+`pause()` the stale machine so new auctions pin the live one. `scripts/check-tee.mjs`
+diagnoses this in one command.
+
 ## What this proves
 
 1. The dealer's bid was **ECIES-encrypted to the pinned TEE's key** (305-byte
