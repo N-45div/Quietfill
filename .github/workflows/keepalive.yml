@@ -33,5 +33,8 @@ jobs:
             else
               echo "$(date -u +%H:%M:%S) ping $i failed (cold start or down) — the request still triggers wake-up"
             fi
-            [ "$i" -lt 14 ] && sleep 57
+            # `if` (not `&&`) so a false test on the last iteration does not
+            # become the script's exit code and fail an otherwise-healthy run.
+            if [ "$i" -lt 14 ]; then sleep 57; fi
           done
+          echo "keep-alive cycle complete"
