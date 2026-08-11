@@ -93,26 +93,26 @@ cd ../web && npm ci && npm test               # 6 crypto tests, incl. a tee-node
 |---|---|
 | `QuietFillAuction` | [`0x155f065A741b1CBe2A57A5CE28A75a3727ffEbDD`](https://coston2-explorer.flare.network/address/0x155f065A741b1CBe2A57A5CE28A75a3727ffEbDD) |
 | FCC extension ID | `66046` (`0x101fe`) |
-| TEE machine | [`0x3febEa2C965e2ca63eeD84a10014f82E02585BCa`](https://coston2-systems-explorer.flare.network/tee/objects) — status **2 = PRODUCTION** |
+| TEE machine | [`0xca6F10bD9bedeF9c9f4c873F64f886B4B3241726`](https://coston2-systems-explorer.flare.network/tee/objects) — status **2 = PRODUCTION** |
 | Base token (FXRP) | [`0x0b6A3645c240605887a5532109323A3E12273dc7`](https://coston2-explorer.flare.network/address/0x0b6A3645c240605887a5532109323A3E12273dc7) — FTestXRP, 6 decimals |
 | Quote token (USDT0) | [`0xC1A5B41512496B80903D1f32d6dEa3a73212E71F`](https://coston2-explorer.flare.network/address/0xC1A5B41512496B80903D1f32d6dEa3a73212E71F) — USD₮0, 6 decimals |
 | TEE registry | `0x1a9C4A0f9D76c0b1D91d22E24E573a9b377618aE` (live FlareTeeManager) |
 
 ### A real sealed-bid auction, settled on-chain
 
-Auction #1 ran end to end against the live stack: the bid was ECIES-encrypted to the
+Auction #6 ran end to end against the live stack: the bid was ECIES-encrypted to the
 registered TEE's key, decrypted only inside the enclave, cleared there, and settled by
-the contract verifying the TEE's chain-bound signature.
+the contract verifying the TEE's chain-bound signature. Full log in [EVIDENCE.md](EVIDENCE.md).
 
 | Step | Transaction |
 |---|---|
-| `createAuction` (1 FXRP, collar 1.0–2.0) | [`0x4ad4257d…ef874`](https://coston2-explorer.flare.network/tx/0x4ad4257d5c2c70f387e6092634771d4cd664030f6c61e81aaa4289f3669ef874) |
-| `submitPrivateBid` (305-byte ciphertext) | [`0x28bc46f3…e80755`](https://coston2-explorer.flare.network/tx/0x28bc46f377639c500a55a5dfd649d0300caea5dff6aeb2faeb83218146e80755) |
-| `requestClear` | [`0x811a2a9a…4ddc36`](https://coston2-explorer.flare.network/tx/0x811a2a9ac875e41a232ab736dc9d92fb0a8d7fe45f99dc009d801fc3974ddc36) |
-| `settleAuction` (TEE signature verified) | [`0x11e1af94…a894d9`](https://coston2-explorer.flare.network/tx/0x11e1af9403aa49063c86b406d62e0c4cf7cde73eabe33f8ecd2c3822b1a894d9) |
+| `createAuction` (1 FXRP, collar 2.0–2.5) | [`0x06fc40f6…2fab9b`](https://coston2-explorer.flare.network/tx/0x06fc40f6294faee3abc81fd04c56ee0786ca6d63851b060d4158816c912fab9b) |
+| `submitPrivateBid` (305-byte ciphertext) | [`0x61daebdd…6ff2288a`](https://coston2-explorer.flare.network/tx/0x61daebdd4ea2ebdf2ba9dc53054407f8d1a0028e5f89f24d44b2b0696ff2288a) |
+| `requestClear` | [`0xe28116ff…1147ec6`](https://coston2-explorer.flare.network/tx/0xe28116fffa24ea72879872df0a529f47133b458238c63e2b82a6487ea1147ec6) |
+| `settleAuction` (TEE signature verified) | [`0xb5ca617b…8a386092`](https://coston2-explorer.flare.network/tx/0xb5ca617b0701dd6b972179f2e2685b6a83c9f4126c2a4a24159072058a386092) |
 
-FCC instruction IDs: bid `0xcbbec905…549db`, clear `0xe6626ee1…8257d4`. Clearing price
-1.5 USDT0/FXRP — and the losing-side prices never left the enclave.
+FCC instruction IDs: bid `0x2ee9bd87…ee5141d`, clear `0x520e8fe6…7dbbc60`. Clearing price
+2.2 USDT0/FXRP inside the 2.0–2.5 collar — and the losing-side prices never left the enclave.
 
 ![Settled auction in the hosted app](docs/screenshots/hosted-settled.png)
 
