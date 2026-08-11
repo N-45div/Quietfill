@@ -30,6 +30,16 @@ FCC instruction IDs (delivered through the public proxy to the enclave):
 - Bid: `0x2ee9bd87558f483ec3980edcc2ee847eb1d91d5fa76082e8fde2d11eeee5141d`
 - Clear: `0x520e8fe65c9d47695b8bfb7657ef5bd84a5b172cd2288d8a3466004517dbbc60`
 
+## Fund recovery, demonstrated live (auction 5)
+
+Auction 5 was created while a stale TEE was still selectable, so it pinned a
+machine that could no longer clear it — exactly the liveness failure the design
+anticipates. No bid was ever placed, and after the settle deadline
+`cancelTimedOutAuction(5)` returned the seller's escrow in full
+([`0x307331c9…f7744b`](https://coston2-explorer.flare.network/tx/0x307331c99b2a50b6a2e13068ce73d07acd757f48900b2b78abaa0f5d07f7744b),
+FXRP balance 9.0 → 10.0). **A dead enclave cannot strand funds** — that is
+invariant 6, proven on-chain rather than asserted.
+
 ## The recorded demo (auction 4)
 
 The demo video drives the **hosted app** through its own complete auction, with
