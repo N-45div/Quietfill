@@ -110,6 +110,39 @@ as the output instructs.
 > tier restarts are routine, so treat re-registration as part of the pre-demo
 > checklist rather than a one-time setup step.
 
+### Automating the restart case
+
+Identity drift is the one that actually bites, and it heals cleanly, so
+[`.github/workflows/tee-refresh.yml`](../../.github/workflows/tee-refresh.yml)
+runs [`scripts/refresh-tee.sh`](../../scripts/refresh-tee.sh) every two hours.
+The script registers whichever identity the proxy is serving now and pauses
+every machine that is no longer it.
+
+It deliberately does nothing when the live TEE is already the only active
+machine: re-registering an unchanged identity is not a no-op — the attestation
+request reverts on an already-registered machine — so a healthy stack is left
+alone. Stale *availability* on a stack that never restarted therefore is not
+auto-healed; `check-tee.mjs` will flag it, and the recovery is to `pause()` the
+live machine and re-run the script so it registers afresh.
+
+It needs one repository secret: **`DEPLOYMENT_PRIVATE_KEY`** (Settings →
+Secrets and variables → Actions). Use the funded Coston2 testnet key that owns
+the machines — never a mainnet key. Without the secret the job logs a notice
+and exits cleanly rather than failing.
+
+Run it by hand any time with `./scripts/refresh-tee.sh`, or from the Actions
+tab via *Run workflow*.
+
+> **Foundry and this repo's `.env`:** foundry auto-loads `.env` from the working
+> directory, and our `CHAIN=coston2` (which our own scripts use to select an
+> addresses file) reaches `cast` as `--chain coston2` — a name foundry does not
+> know, so `cast` refuses to run from the repo root. Pass foundry's own name
+> when running `cast` from here:
+>
+> ```bash
+> cast call <addr> "<sig>" --rpc-url "$CHAIN_URL" --chain flare-coston2
+> ```
+
 ## 5 — Point the app at it
 
 Open the `quietfill-web` URL, paste the contract address and

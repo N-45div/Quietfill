@@ -1,0 +1,60 @@
+# Heals the TEE registration after a host restart, without anyone remembering.
+#
+# tee-node holds its identity in memory, so a restart gives the proxy a new TEE
+# address and orphans the on-chain registration — the stale machine still reads
+# PRODUCTION and still gets pinned, so bids can never be cleared. Free-tier
+# hosts restart routinely, so this checks every two hours and re-registers the
+# identity actually being served, retiring the one it replaced.
+#
+# When the live TEE is already the only active machine the job exits in seconds
+# without touching the chain, so running it often is cheap.
+#
+# Requires one repository secret: DEPLOYMENT_PRIVATE_KEY (the machine owner;
+# a funded Coston2 testnet key, never a mainnet one).
+name: heal-tee-registration
+
+on:
+  schedule:
+    - cron: "0 */2 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: tee-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache-dependency-path: tools/go.sum
+
+      - uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Re-register the live identity and retire stale machines
+        env:
+          DEPLOYMENT_PRIVATE_KEY: ${{ secrets.DEPLOYMENT_PRIVATE_KEY }}
+          EXT_PROXY_URL: ${{ vars.PROXY_URL || 'https://quietfill-fcc.onrender.com' }}
+          CHAIN_URL: https://coston2-api.flare.network/ext/C/rpc
+          NORMAL_PROXY_URL: https://tee-proxy-coston2-1.flare.rocks
+          EXTENSION_ID_DEC: "66046"
+          SIMULATED_TEE: "true"
+        run: |
+          if [ -z "$DEPLOYMENT_PRIVATE_KEY" ]; then
+            echo "DEPLOYMENT_PRIVATE_KEY secret is not set — skipping."
+            echo "Add it under Settings → Secrets and variables → Actions."
+            exit 0
+          fi
+          chmod +x scripts/refresh-tee.sh
+          ./scripts/refresh-tee.sh
+
+      - name: Verify the stack is deliverable
+        if: always()
+        env:
+          EXT_PROXY_URL: ${{ vars.PROXY_URL || 'https://quietfill-fcc.onrender.com' }}
+        run: node scripts/check-tee.mjs
