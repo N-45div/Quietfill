@@ -70,3 +70,6 @@ DEPLOYMENT.md
 
 config/**/*.log
 config/register-tee.state
+# When this machine last refreshed the TEE availability check — local state,
+# meaningless on another machine.
+config/last-register.txt
