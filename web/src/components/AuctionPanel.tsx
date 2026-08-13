@@ -26,6 +26,7 @@ import {
   erc20Abi,
   formatUnits,
   INSTRUCTION_FEE_WEI,
+  parseUnits,
   quietFillAbi,
   settleAbi,
 } from "../lib/quietfill";
@@ -51,13 +52,35 @@ type Auction = {
 
 /** Dealer + lifecycle side: bid on, clear, settle, and recover funds from an auction. */
 export function AuctionPanel({ ctx }: { ctx: AppContext }) {
-  const [auctionId, setAuctionId] = useState("1");
+  const [auctionId, setAuctionId] = useState("");
   const [auction, setAuction] = useState<Auction | null>(null);
-  const [price, setPrice] = useState("2.2");
+  const [price, setPrice] = useState("");
+  const [priceEdited, setPriceEdited] = useState(false);
   const [busy, setBusy] = useState(false);
   const [myEscrow, setMyEscrow] = useState<bigint>(0n);
 
   const { publicClient, walletClient, account, chain, contract, proxyUrl, log } = ctx;
+
+  // Open on the newest auction. Guessing an id is not discovery, and landing on
+  // an empty panel reads as a broken app.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const next = (await publicClient.readContract({
+          address: contract,
+          abi: quietFillAbi,
+          functionName: "nextAuctionId",
+        })) as bigint;
+        if (!cancelled && next > 1n) setAuctionId((next - 1n).toString());
+      } catch {
+        if (!cancelled) setAuctionId("1");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [publicClient, contract]);
 
   const refresh = useCallback(async () => {
     const id = BigInt(auctionId || "0");
@@ -153,7 +176,9 @@ export function AuctionPanel({ ctx }: { ctx: AppContext }) {
       contractAddr: contract,
       auctionId: id,
       nonce,
-      unitPriceWei: BigInt(Math.round(Number(price) * 1e6)) * 10n ** 12n,
+      // Exact decimal parse — going through a float here silently rounds some
+      // prices, and the bid the enclave sees must be the one that was typed.
+      unitPriceWei: parseUnits(price.trim(), 18),
       salt: salt as Hex,
     });
     const ciphertext = eciesEncrypt(teePublicKeyBytes(info.teeInfo.publicKey), hexToBytes(plaintext));
@@ -262,8 +287,28 @@ export function AuctionPanel({ ctx }: { ctx: AppContext }) {
     log("Auction cancelled after timeout — escrows recoverable", "ok", explorerTxUrl(chain, hash) ?? undefined);
   });
 
+  // A bid outside the collar is accepted and escrowed but can never win, so
+  // start inside it and say so plainly rather than letting the default price
+  // silently disqualify the bid.
+  useEffect(() => {
+    if (!auction || priceEdited) return;
+    const mid = (auction.floorPriceWei + auction.ceilingPriceWei) / 2n;
+    setPrice(formatUnits(mid, 18));
+  }, [auction, priceEdited]);
+
   const now = BigInt(Math.floor(Date.now() / 1000));
   const state = auction ? AUCTION_STATES[auction.state] : null;
+
+  let priceWei: bigint | null = null;
+  try {
+    priceWei = price.trim() === "" ? null : parseUnits(price.trim(), 18);
+  } catch {
+    priceWei = null;
+  }
+  const priceOutsideCollar =
+    auction != null &&
+    priceWei != null &&
+    (priceWei < auction.floorPriceWei || priceWei > auction.ceilingPriceWei);
   const biddingOpen = auction?.state === 1 && now < auction.bidDeadline;
   const clearable = auction?.state === 1 && now >= auction.bidDeadline && now <= auction.settleDeadline;
   const settleable = auction?.state === 2 && now <= auction.settleDeadline;
@@ -281,9 +326,23 @@ export function AuctionPanel({ ctx }: { ctx: AppContext }) {
         </div>
         <div>
           <label>Your bid (quote per base, stays private)</label>
-          <input value={price} onChange={(e) => setPrice(e.target.value)} disabled={!biddingOpen} />
+          <input
+            value={price}
+            onChange={(e) => {
+              setPriceEdited(true);
+              setPrice(e.target.value);
+            }}
+            disabled={!biddingOpen}
+          />
         </div>
       </div>
+      {priceOutsideCollar && auction && (
+        <p className="notice">
+          {formatUnits(priceWei!, 18)} is outside this auction&apos;s collar (
+          {formatUnits(auction.floorPriceWei, 18)} – {formatUnits(auction.ceilingPriceWei, 18)}). The
+          bid would be escrowed but could never win.
+        </p>
+      )}
 
       {auction && state && (
         <dl className="facts">
@@ -315,7 +374,7 @@ export function AuctionPanel({ ctx }: { ctx: AppContext }) {
 
       <div>
         {biddingOpen && (
-          <button onClick={bid} disabled={busy}>
+          <button onClick={bid} disabled={busy || priceOutsideCollar || priceWei == null}>
             {myEscrow > 0n ? "Replace encrypted bid" : "Escrow ceiling & bid"}
           </button>
         )}

@@ -35,7 +35,7 @@ export function Home({ walletNotice }: { walletNotice: string }) {
 
         <div className="ticket" aria-hidden>
           <div className="t-head">
-            <h3>AUCTION #7 — 5,000 FXRP</h3>
+            <h3>EXAMPLE AUCTION — 5,000 FXRP</h3>
             <span className="status ClearRequested">Clearing</span>
           </div>
           <p className="t-sub">collar 2.00 – 2.50 USDT0 · 4 sealed bids</p>
