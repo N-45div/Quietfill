@@ -4,11 +4,18 @@
  *
  *   node scripts/check-tee.mjs
  *
- * tee-node regenerates its identity on every restart, so a restarted proxy
- * serves a TEE that the registry no longer pins. Auctions created in that
- * state pin a machine nobody is running, and bidding is impossible until it
- * is fixed. This reports that drift before it costs you a demo.
+ * Two things silently break instruction delivery:
+ *
+ *   1. Identity drift. tee-node regenerates its identity on every restart, so a
+ *      restarted proxy serves a TEE the registry no longer pins. Auctions
+ *      created in that state pin a machine nobody runs, and bidding fails.
+ *   2. Stale availability. Data providers only deliver to a machine whose
+ *      availability check is fresh (currently < 6h). The machine still reads
+ *      status 2 and still gets pinned — instructions just never arrive.
+ *
+ * Neither is visible from the chain alone, so check both before a demo.
  */
+const AVAILABILITY_MAX_HOURS = 6;
 const PROXY = process.env.EXT_PROXY_URL ?? "https://quietfill-fcc.onrender.com";
 const RPC = process.env.CHAIN_URL ?? "https://coston2-api.flare.network/ext/C/rpc";
 const MANAGER = "0x1a9C4A0f9D76c0b1D91d22E24E573a9b377618aE";
@@ -85,4 +92,41 @@ if (!picks.has(live)) {
   );
 } else {
   console.log("\n  PASS  the live TEE is the only machine being pinned.");
+}
+
+// 4 — availability freshness. Providers stop delivering to a machine whose
+// availability check has aged out, and nothing on-chain shows it: the machine
+// still reads status 2 and is still pinned, instructions just never arrive.
+// The registration timestamp is recorded locally by post-build.sh.
+import { readFile } from "node:fs/promises";
+
+let registeredAt = null;
+try {
+  const raw = (await readFile(new URL("../config/last-register.txt", import.meta.url), "utf8")).trim();
+  const parsed = Date.parse(raw);
+  if (!Number.isNaN(parsed)) registeredAt = parsed;
+} catch {
+  /* no record yet */
+}
+
+if (registeredAt === null) {
+  console.log(
+    `\n  NOTE  no registration timestamp on record. Providers only deliver to a machine\n` +
+      `        whose availability check is under ${AVAILABILITY_MAX_HOURS}h old — if you have not re-registered\n` +
+      `        recently, run ./scripts/post-build.sh before demoing.`,
+  );
+} else {
+  const hours = (Date.now() - registeredAt) / 3_600_000;
+  if (hours >= AVAILABILITY_MAX_HOURS) {
+    fail(
+      `availability check is ${hours.toFixed(1)}h old (limit ${AVAILABILITY_MAX_HOURS}h) — providers will not\n` +
+        "        deliver instructions, even though the machine still reads PRODUCTION.\n" +
+        "        Re-run ./scripts/post-build.sh to refresh it.",
+    );
+  } else {
+    console.log(
+      `  ok    availability check ${hours.toFixed(1)}h old ` +
+        `(${(AVAILABILITY_MAX_HOURS - hours).toFixed(1)}h before it must be refreshed)`,
+    );
+  }
 }

@@ -157,6 +157,11 @@ go run ./cmd/register-tee \
     -state "$PROJECT_DIR/config/register-tee.state" \
     || die "Register TEE failed"
 
+# Providers only deliver to a machine whose availability check is fresh (<6h),
+# and that staleness is invisible on-chain. Record when it was refreshed so
+# check-tee.mjs can warn before it costs a demo.
+date -u +"%Y-%m-%dT%H:%M:%SZ" > "$PROJECT_DIR/config/last-register.txt"
+
 echo ""
 echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN} Post-build complete${NC}"

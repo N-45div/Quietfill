@@ -97,6 +97,19 @@ node scripts/check-tee.mjs
 If it fails, re-run `post-build.sh` and retire the stale machine with `pause()`
 as the output instructs.
 
+> **Run this within a few hours of any demo.** Two things stop providers from
+> delivering instructions, and *neither is visible on-chain* — the machine keeps
+> reading `status 2` either way:
+>
+> 1. **Identity drift** — a container restart gives tee-node a brand-new
+>    identity, orphaning the registration.
+> 2. **Stale availability** — the availability check ages out after **~6 hours**.
+>
+> The fix for both is the same: `post-build.sh` (re-registers with a fresh
+> availability check), then `pause()` the machine it replaced. On Render's free
+> tier restarts are routine, so treat re-registration as part of the pre-demo
+> checklist rather than a one-time setup step.
+
 ## 5 — Point the app at it
 
 Open the `quietfill-web` URL, paste the contract address and
