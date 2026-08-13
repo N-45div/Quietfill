@@ -93,7 +93,7 @@ cd ../web && npm ci && npm test               # 6 crypto tests, incl. a tee-node
 |---|---|
 | `QuietFillAuction` | [`0x155f065A741b1CBe2A57A5CE28A75a3727ffEbDD`](https://coston2-explorer.flare.network/address/0x155f065A741b1CBe2A57A5CE28A75a3727ffEbDD) |
 | FCC extension ID | `66046` (`0x101fe`) |
-| TEE machine | [`0xca6F10bD9bedeF9c9f4c873F64f886B4B3241726`](https://coston2-systems-explorer.flare.network/tee/objects) — status **2 = PRODUCTION** |
+| TEE machine | [`0x52b75aae156aDCDa62782C6631074e4298f12399`](https://coston2-systems-explorer.flare.network/tee/objects) — status **2 = PRODUCTION**. The enclave identity changes on restart, so this address rotates; each past auction stays verifiable against the machine it pinned. |
 | Base token (FXRP) | [`0x0b6A3645c240605887a5532109323A3E12273dc7`](https://coston2-explorer.flare.network/address/0x0b6A3645c240605887a5532109323A3E12273dc7) — FTestXRP, 6 decimals |
 | Quote token (USDT0) | [`0xC1A5B41512496B80903D1f32d6dEa3a73212E71F`](https://coston2-explorer.flare.network/address/0xC1A5B41512496B80903D1f32d6dEa3a73212E71F) — USD₮0, 6 decimals |
 | TEE registry | `0x1a9C4A0f9D76c0b1D91d22E24E573a9b377618aE` (live FlareTeeManager) |

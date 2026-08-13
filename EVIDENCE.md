@@ -30,6 +30,24 @@ FCC instruction IDs (delivered through the public proxy to the enclave):
 - Bid: `0x2ee9bd87558f483ec3980edcc2ee847eb1d91d5fa76082e8fde2d11eeee5141d`
 - Clear: `0x520e8fe65c9d47695b8bfb7657ef5bd84a5b172cd2288d8a3466004517dbbc60`
 
+## Most recent run (auction 7, 13 Aug)
+
+Re-verified after a container restart rotated the enclave identity — the stack
+was re-registered to TEE `0x52b75aae156aDCDa62782C6631074e4298f12399` and drove
+another complete auction: settled at 2.2 USDT0/FXRP, escrow returned in full
+(seller and dealer balances both back to 10.0).
+
+| Step | Tx |
+|---|---|
+| `createAuction` | [`0xa0f86329…77cac05`](https://coston2-explorer.flare.network/tx/0xa0f863299168f4b80a060d71c0a70ff7a7244747bdf8d5094e90226e377cac05) |
+| `submitPrivateBid` | [`0xc1ccf0c0…f83ba1d4`](https://coston2-explorer.flare.network/tx/0xc1ccf0c0d236e474f1d3c30a3f4a6c9791a596f9b1f919fd0d53b491f83ba1d4) |
+| `requestClear` | [`0x718aa1a7…abb09c76`](https://coston2-explorer.flare.network/tx/0x718aa1a7fb0182fb17e50ce1a143cecfbeb66dd4ba2d39013062c273abb09c76) |
+| **`settleAuction`** | [`0x363280a3…b1598c88`](https://coston2-explorer.flare.network/tx/0x363280a3084c2e5943098fbc698901c7bd4cce81b7408831e20ec774b1598c88) |
+
+Three independent auctions have now settled this way (4, 6, 7), each against a
+different enclave identity — the protocol does not depend on any one machine
+surviving.
+
 ## Fund recovery, demonstrated live (auction 5)
 
 Auction 5 was created while a stale TEE was still selectable, so it pinned a
