@@ -48,6 +48,10 @@ sequenceDiagram
 3. **Clear.** After the bid deadline anyone may request the clear. The TEE selects the highest bid inside the collar (ties broken by lower address), and returns a `ClearResult` that binds the contract address, auction ID, winner, price, nonce, bid commitment, and bid counts — signed with the tee-node's chain-bound `TEE_ACTION_RESULT` scheme.
 4. **Settle.** Anyone relays the signed result. The contract recomputes the exact tee-node digest — `keccak(keccak(data) ‖ instructionId ‖ keccak("threshold") ‖ 0x01)`, wrapped with the domain, `block.chainid`, and EIP-191 — and recovers the signer. Only the pinned TEE's address settles: winner gets the lot, seller gets `lot × clearingPrice`, the winner's spread is refunded, losers pull their full escrow back. If nothing clears in time, `cancelTimedOutAuction` returns everything.
 
+> **[ARCHITECTURE.md](ARCHITECTURE.md)** goes deeper: component and trust
+> boundaries, what stays secret and for how long, and every failure path —
+> including the one design cost worth knowing about.
+
 ## Security model
 
 | Property | Enforced by |
