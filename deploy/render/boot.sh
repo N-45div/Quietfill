@@ -96,11 +96,32 @@ if [[ "${GENERATE_ONLY:-0}" == "1" ]]; then
 fi
 
 # --- processes -------------------------------------------------------------
-redis-server --save "" --appendonly no --port 6379 --bind 127.0.0.1 &
-REDIS_PID=$!
-
-(cd /app/proxy && exec ./main) &
-PROXY_PID=$!
+#
+# Each process is supervised individually instead of the container exiting when
+# any one of them dies. That distinction matters more here than it looks:
+# tee-node holds its enclave identity in memory, so killing the container to
+# restart it mints a brand-new TEE address and orphans the on-chain
+# registration — the app is then unusable until someone re-registers. The
+# fragile process is the proxy (it panics on a transient indexer hiccup), and
+# it is *not* the one holding the identity. Restarting it in place keeps the
+# identity, and the auctions pinned to it, alive.
+supervise() {
+    local name="$1"
+    shift
+    (
+        local attempt=0
+        while true; do
+            "$@" &
+            local pid=$!
+            wait "$pid"
+            local code=$?
+            attempt=$((attempt + 1))
+            echo "boot: ${name} exited (${code}) — restarting, attempt ${attempt}" >&2
+            # Brief, capped backoff so a hard-failing dependency does not spin hot.
+            sleep $(( attempt < 5 ? 2 : 15 ))
+        done
+    ) &
+}
 
 export MODE="${MODE:-1}"
 export CONFIG_PORT=5501 SIGN_PORT=7701 EXTENSION_PORT=7702
@@ -111,18 +132,14 @@ export GOVERNANCE_SIGNERS="${GOVERNANCE_SIGNERS:-${INITIAL_OWNER:-}}"
 export GOVERNANCE_THRESHOLD="${GOVERNANCE_THRESHOLD:-1}"
 export LOG_LEVEL="${LOG_LEVEL:-INFO}"
 
-/app/server &
-TEE_PID=$!
+supervise redis redis-server --save "" --appendonly no --port 6379 --bind 127.0.0.1
+supervise proxy sh -c 'cd /app/proxy && exec ./main'
+supervise tee-node /app/server
+supervise extension node /app/extension/dist/main.js
+supervise edge node /app/edge.js
 
-node /app/extension/dist/main.js &
-EXT_PID=$!
+echo "boot: all five processes supervised; a crash restarts only that process"
 
-node /app/edge.js &
-EDGE_PID=$!
-
-echo "boot: redis=$REDIS_PID proxy=$PROXY_PID tee=$TEE_PID ext=$EXT_PID edge=$EDGE_PID"
-
-wait -n $REDIS_PID $PROXY_PID $TEE_PID $EXT_PID $EDGE_PID
-echo "boot: a process exited — shutting down for restart" >&2
-kill -TERM $REDIS_PID $PROXY_PID $TEE_PID $EXT_PID $EDGE_PID 2>/dev/null
-exit 1
+# Nothing below should return. If every supervisor somehow dies the container
+# ends and the platform restarts it, which is the correct last resort.
+wait
