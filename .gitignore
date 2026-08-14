@@ -56,9 +56,10 @@ python/.pytest_cache/
 
 docs/superpowers
 
-# Recorded demo footage — upload to YouTube rather than bloating the repo.
-demo/*.mp4
-demo/*.webm
+# Demo production material — footage, the recording driver, and the narration
+# script. This is how the video gets made, not part of the product; the video
+# itself is uploaded and linked rather than committed.
+demo/
 
 notes/
 

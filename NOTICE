@@ -1,0 +1,11 @@
+Attribution
+===========
+
+This repository was built on Flare Foundation's `fce-extension-scaffold` and
+deliberately retains its history. Portions of the scaffold — the extension
+framework, deployment tooling, scripts, proxy and Docker plumbing, and the
+documentation under `docs/` — remain the copyright of their original authors
+and are not covered by the MIT grant in LICENSE.
+
+QuietFill's own work begins at commit `d719b2e`; see the Provenance section of
+README.md.
