@@ -15,7 +15,11 @@ name: heal-tee-registration
 
 on:
   schedule:
-    - cron: "0 */2 * * *"
+    # Every 30 minutes: the host crashes and restarts on its own schedule, and
+    # each restart rotates the enclave identity, so the window where the app is
+    # unusable is however long healing takes to run. The healthy path exits in
+    # seconds without touching the chain, so this is cheap to run often.
+    - cron: "*/30 * * * *"
   workflow_dispatch:
 
 concurrency:
@@ -46,8 +50,8 @@ jobs:
           SIMULATED_TEE: "true"
         run: |
           if [ -z "$DEPLOYMENT_PRIVATE_KEY" ]; then
-            echo "DEPLOYMENT_PRIVATE_KEY secret is not set — skipping."
-            echo "Add it under Settings → Secrets and variables → Actions."
+            echo "::warning title=TEE healing is disabled::DEPLOYMENT_PRIVATE_KEY is not set, so nothing was healed. Add it under Settings > Secrets and variables > Actions. Until then a host restart leaves the app unusable until someone re-registers by hand."
+            echo "DEPLOYMENT_PRIVATE_KEY secret is not set — nothing to do."
             exit 0
           fi
           chmod +x scripts/refresh-tee.sh
