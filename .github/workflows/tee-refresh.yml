@@ -1,24 +1,30 @@
-# Heals the TEE registration after a host restart, without anyone remembering.
+# Keeps the hosted TEE deliverable without anyone remembering to.
 #
-# tee-node holds its identity in memory, so a restart gives the proxy a new TEE
-# address and orphans the on-chain registration — the stale machine still reads
-# PRODUCTION and still gets pinned, so bids can never be cleared. Free-tier
-# hosts restart routinely, so this checks every two hours and re-registers the
-# identity actually being served, retiring the one it replaced.
+# Two things silently stop instruction delivery, and neither is visible
+# on-chain (the machine reads PRODUCTION either way):
 #
-# When the live TEE is already the only active machine the job exits in seconds
-# without touching the chain, so running it often is cheap.
+#   1. A host restart mints a new enclave identity, orphaning the
+#      registration. scripts/refresh-tee.sh re-registers the identity the
+#      proxy actually serves and retires what it replaced.
+#   2. The availability check ages out (~6h). The script renews it on a
+#      healthy stack every couple of hours using register-tee's attestation
+#      and availability steps alone, which are valid on an already-registered
+#      machine.
 #
-# Requires one repository secret: DEPLOYMENT_PRIVATE_KEY (the machine owner;
-# a funded Coston2 testnet key, never a mainnet one).
+# The script runs inside the same golang container used when operating by
+# hand — environment drift between the runner and that container previously
+# produced CI-only failures that could not be reproduced locally. Identical
+# environment, identical behaviour. The healthy no-op path costs about a
+# minute; the pass/fail signal is the final verification, and the summary
+# carries the output either way.
+#
+# Requires one repository secret: DEPLOYMENT_PRIVATE_KEY (machine owner; a
+# funded Coston2 testnet key, never a mainnet one). Without it the run still
+# reports health, and fails only if healing was actually needed.
 name: heal-tee-registration
 
 on:
   schedule:
-    # Every 30 minutes: the host crashes and restarts on its own schedule, and
-    # each restart rotates the enclave identity, so the window where the app is
-    # unusable is however long healing takes to run. The healthy path exits in
-    # seconds without touching the chain, so this is cheap to run often.
     - cron: "*/30 * * * *"
   workflow_dispatch:
 
@@ -27,38 +33,34 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  refresh:
+  heal:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
+    env:
+      EXT_PROXY_URL: ${{ vars.PROXY_URL || 'https://quietfill-fcc.onrender.com' }}
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.25"
-          cache-dependency-path: tools/go.sum
-
-      - uses: foundry-rs/foundry-toolchain@v1
-
-      - name: Re-register the live identity and retire stale machines
+      - name: Heal or renew (same container as the manual procedure)
         env:
           DEPLOYMENT_PRIVATE_KEY: ${{ secrets.DEPLOYMENT_PRIVATE_KEY }}
-          EXT_PROXY_URL: ${{ vars.PROXY_URL || 'https://quietfill-fcc.onrender.com' }}
-          CHAIN_URL: https://coston2-api.flare.network/ext/C/rpc
-          NORMAL_PROXY_URL: https://tee-proxy-coston2-1.flare.rocks
-          EXTENSION_ID_DEC: "66046"
-          SIMULATED_TEE: "true"
         run: |
-          if [ -z "$DEPLOYMENT_PRIVATE_KEY" ]; then
-            echo "::warning title=TEE healing is disabled::DEPLOYMENT_PRIVATE_KEY is not set, so nothing was healed. Add it under Settings > Secrets and variables > Actions. Until then a host restart leaves the app unusable until someone re-registers by hand."
-            echo "DEPLOYMENT_PRIVATE_KEY secret is not set — nothing to do."
-            exit 0
-          fi
-          chmod +x scripts/refresh-tee.sh
-          ./scripts/refresh-tee.sh
+          set -o pipefail
+          docker run --rm \
+            -e HOME=/tmp -e GOCACHE=/tmp/go-cache -e GOPATH=/tmp/go \
+            -e GOTOOLCHAIN=auto \
+            -e DEPLOYMENT_PRIVATE_KEY \
+            -e EXT_PROXY_URL \
+            -e SIMULATED_TEE=true \
+            -v "$PWD:/workspace" -w /workspace \
+            golang:1.25.1 \
+            bash -c 'curl -sL https://foundry.paradigm.xyz | bash >/dev/null 2>&1; export PATH=/tmp/.foundry/bin:$PATH; foundryup >/dev/null 2>&1; bash scripts/refresh-tee.sh' \
+            2>&1 | tee heal.txt
+          { echo "### Heal / renew"; echo '```'; tail -30 heal.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Verify the stack is deliverable
+      - name: Verify deliverable
         if: always()
-        env:
-          EXT_PROXY_URL: ${{ vars.PROXY_URL || 'https://quietfill-fcc.onrender.com' }}
-        run: node scripts/check-tee.mjs
+        run: |
+          set -o pipefail
+          node scripts/check-tee.mjs 2>&1 | tee verify.txt
+          { echo "### Verification"; echo '```'; cat verify.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"

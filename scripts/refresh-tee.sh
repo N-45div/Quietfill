@@ -10,15 +10,16 @@
 # This registers whatever identity the proxy is serving now and pauses every
 # machine that is no longer it.
 #
-# Scope, deliberately: it only acts when the live identity is not already the
-# sole active machine. Re-registering an unchanged identity is NOT a no-op —
-# the attestation request reverts on a machine that is already registered — so
-# a healthy stack is left alone rather than poked every run.
-#
-# Not covered: availability proofs age out (~6h per Flare's FCC notes) and
-# there is no supported way to refresh one without re-registering. If a stack
-# that never restarted stops receiving instructions, force a re-register by
-# pausing the live machine first, then running this.
+# When the live identity is already the sole active machine, the heavy path is
+# skipped — but availability still ages out (~6h per Flare's FCC notes), and a
+# machine with a stale check keeps reading PRODUCTION while providers quietly
+# stop delivering to it. So the healthy path periodically renews the check with
+# register-tee's attestation + availability steps alone (`-command ra`): both
+# succeed on an already-registered machine, whereas the production step reverts
+# (already in production) and full re-registration reverts on the duplicate
+# attestation. The renewal is time-gated to roughly every couple of hours and
+# best-effort — a failed renewal logs and moves on, since drift healing remains
+# the guaranteed recovery.
 #
 # Required env:
 #   DEPLOYMENT_PRIVATE_KEY   owner of the machines (also pays gas)
@@ -67,8 +68,27 @@ CAST_CHAIN="${CAST_CHAIN:-flare-coston2}"
 die() { echo "[refresh-tee] ERROR: $*" >&2; exit 1; }
 log() { echo "[refresh-tee] $*"; }
 
-: "${DEPLOYMENT_PRIVATE_KEY:?set DEPLOYMENT_PRIVATE_KEY}"
 : "${EXT_PROXY_URL:?set EXT_PROXY_URL}"
+
+require_key() {
+    [[ -n "${DEPLOYMENT_PRIVATE_KEY:-}" ]] \
+        || die "the stack needs on-chain work and DEPLOYMENT_PRIVATE_KEY is not set"
+}
+
+register_tee() {
+    local command="$1"
+    (
+        cd "$PROJECT_DIR/tools"
+        SIMULATED_TEE="${SIMULATED_TEE:-true}" go run ./cmd/register-tee \
+            -a "$ADDRESSES_FILE" \
+            -c "$CHAIN_URL" \
+            -p "$EXT_PROXY_URL" \
+            -h "$EXT_PROXY_URL" \
+            -ep "$NORMAL_PROXY_URL" \
+            -command "$command" \
+            -state "$PROJECT_DIR/config/register-tee.state"
+    )
+}
 
 # --- the identity the proxy is serving right now ---------------------------
 # Parsed with grep rather than jq so this runs anywhere cast does (Git Bash on
@@ -92,26 +112,39 @@ active_count="$(grep -c . <<<"${active_list:-}" || true)"
 [[ -z "$active_list" ]] && active_count=0
 
 if [[ "$active_count" == "1" ]] && grep -qi "${LIVE#0x}" <<<"$active_list"; then
-    log "healthy — the live TEE is already the only active machine, nothing to do"
+    log "healthy — the live TEE is the only active machine"
+
+    # Renew the availability check in the first half-hour of every second hour
+    # (or on demand), so it never crosses the ~6h ageing limit even if a couple
+    # of renewals in a row fail. Best-effort by design.
+    hour="$(date -u +%H)"; minute="$(date -u +%M)"
+    if [[ "${FORCE_AVAILABILITY_REFRESH:-0}" == "1" ]] \
+        || (( 10#$hour % 2 == 0 && 10#$minute < 30 )); then
+        if [[ -z "${DEPLOYMENT_PRIVATE_KEY:-}" ]]; then
+            log "WARNING: renewal window, but DEPLOYMENT_PRIVATE_KEY is not set — skipping renewal"
+            exit 0
+        fi
+        log "renewing the availability check (attestation + availability, no production step)…"
+        if register_tee ra; then
+            date -u +"%Y-%m-%dT%H:%M:%SZ" > "$PROJECT_DIR/config/last-register.txt"
+            log "availability check renewed"
+        else
+            log "WARNING: availability renewal failed — leaving the healthy registration alone; drift healing still covers a rotation"
+        fi
+    else
+        log "outside the renewal window — nothing else to do"
+    fi
     exit 0
 fi
+
+require_key
 
 # --- register the identity the proxy is actually serving -------------------
 if grep -qi "${LIVE#0x}" <<<"${active_list:-}"; then
     log "live TEE is registered but shares the extension with stale machines — retiring those only"
 else
     log "live TEE is not registered (restart rotated the identity) — registering…"
-    (
-        cd "$PROJECT_DIR/tools"
-        SIMULATED_TEE="${SIMULATED_TEE:-true}" go run ./cmd/register-tee \
-            -a "$ADDRESSES_FILE" \
-            -c "$CHAIN_URL" \
-            -p "$EXT_PROXY_URL" \
-            -h "$EXT_PROXY_URL" \
-            -ep "$NORMAL_PROXY_URL" \
-            -command rRap \
-            -state "$PROJECT_DIR/config/register-tee.state"
-    ) || die "register-tee failed"
+    register_tee rRap || die "register-tee failed"
 
     date -u +"%Y-%m-%dT%H:%M:%SZ" > "$PROJECT_DIR/config/last-register.txt"
 
