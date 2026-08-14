@@ -1,14 +1,21 @@
 # Keeps the Render free instance from hitting its 15-minute idle spin-down.
 #
-# This is the BACKUP layer. GitHub's scheduled runs are queued on shared
-# infrastructure and are regularly delayed — sometimes past the idle window —
-# so an external monitor (UptimeRobot or similar, 5-minute interval) should be
-# the primary pinger. See deploy/render/README.md.
+# This matters more than an ordinary uptime ping: a spin-down does not just add
+# a cold start, it replaces the container — which mints a new enclave identity
+# and orphans the TEE registration until the healer runs. Keeping the instance
+# awake prevents the failure rather than repairing it.
 #
-# To tolerate that jitter, each run pings for ~14 minutes while the schedule
-# fires every 10, so consecutive runs overlap and a single skipped run still
-# leaves no gap longer than the idle timeout. Public repos get unlimited
-# Actions minutes, so the long job costs nothing.
+# GitHub delays high-frequency schedules heavily: this cron is */10 but fires
+# roughly hourly in practice (observed 60–70 minute spacing). Each run
+# therefore pings for ~80 minutes so consecutive runs overlap even at that
+# real-world cadence, leaving no silent gap for the 15-minute idle timer to
+# win. Overlapping runs are harmless — they are only curls — so there is
+# deliberately no concurrency group. Public repos get unlimited Actions
+# minutes, so the long job costs nothing.
+#
+# This is still the BACKUP layer. An external monitor (UptimeRobot or similar,
+# 5-minute interval, free, fires on time) is the primary — see
+# deploy/render/README.md.
 #
 # Note: GitHub pauses scheduled workflows after 60 days without repo activity.
 name: keep-proxy-awake
@@ -21,20 +28,20 @@ on:
 jobs:
   ping:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 85
     steps:
-      - name: Ping proxy /info for ~14 minutes
+      - name: Ping proxy /info for ~80 minutes
         env:
           PROXY_URL: ${{ vars.PROXY_URL || 'https://quietfill-fcc.onrender.com' }}
         run: |
-          for i in $(seq 1 14); do
-            if curl -sf --max-time 90 "$PROXY_URL/info" > /dev/null; then
+          for i in $(seq 1 96); do
+            if curl -sf --max-time 60 "$PROXY_URL/info" > /dev/null; then
               echo "$(date -u +%H:%M:%S) ping $i ok"
             else
               echo "$(date -u +%H:%M:%S) ping $i failed (cold start or down) — the request still triggers wake-up"
             fi
             # `if` (not `&&`) so a false test on the last iteration does not
             # become the script's exit code and fail an otherwise-healthy run.
-            if [ "$i" -lt 14 ]; then sleep 57; fi
+            if [ "$i" -lt 96 ]; then sleep 50; fi
           done
           echo "keep-alive cycle complete"
